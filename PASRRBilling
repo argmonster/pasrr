@@ -1,0 +1,618 @@
+'*******************************************************************************
+'    SCRIPT DESCRIPTION
+'       This script is for creating billable PASRR Services.  It finds 
+'        service code 554 event between two events with the same service
+'        code that has zero client & staff time, recipient code of 9,
+'        attendance code of 9, number of recipients equal to 0, &
+'        a location code of one.  It will roll up the client & staff time
+'        for all the services between the starting & ending service & 
+'        create a new service that looks like the ending service, but with
+'        a service code of 555 & the total client & staff time'
+'
+'        It has been placed on menu ### line ##.  Reference Heat ticket ######.
+'=================================================
+'    ASSUMPTIONS
+'=================================================
+'    PARAMETERS
+'        NONE
+'=================================================
+'    AUTHOR: Robert Bell
+'    DATE CREATED: 05/31/2013
+'=================================================
+'    DATABASES INVOLVED:
+'        00 - Events
+'
+'    DSTS READ:
+'   00001  E.STAFF          - Staff Register ID
+'   00002  E.DATE           - Service Date
+'   00003  E.START          - Service start time of day
+'   00004  E.CASE.NO        - Client Register ID
+'   00005  E.SER            - Service code
+'   00006  E.DESC           - Service Code Desciption/Note
+'   00007  E.RU             - Service Reporting Unit
+'   00008  E.DUR            - Staff duration/time
+'   00010  E.CL.DUR         - Client duration/time
+'   00014  E.COMP.FEE       - Computed Fee (Expected Payment)
+'   00015  E.FS             - Service Funding Source
+'   00017  E.POST.FLG       - Y/N Flag for posted to GL
+'   00019  E.BILL.FLG       - Y/N Flag for service billed
+'   00021  E.BILL.ST        - Status code for billing
+'   00032  E.ATT            - Attendance code
+'   00033  E.RECIP          - Recipient code
+'   00034  E.LOC            - Location Code
+'   00035  E.PROJ           - Project Code
+
+%const billableSAC 555      ' Service code for Billable Service
+
+
+start PASRRBilling()
+
+'$trace("path", $scriptid) $trace("on")
+
+'variable declarations
+promptIdx            is binary   'Prompt index pointer
+maxPrompts           is binary   'Number of prompts
+clientIds[]          is alpha    'list of client ids that have events in date range
+validServices[]      is binary   'List of service codes to process
+arrayIndex           is binary   'Array Index pointer
+
+runMode              is alpha    'Production/Test indicator
+startDate            is date     'Start Date of events being pulled
+endDate              is date     'End Date of events being pulled
+
+MsgString            is alpha    'Temporary String
+
+' report info
+reportNbr            is binary   'Report handle
+hdr[]                is alpha    'Report header variable
+printString          is alpha    'Output Line
+
+'Current Event Arrays
+estaff[]             is alpha    'event staff
+edesc[]              is alpha    'event description
+edate[]              is date     'event date
+estart[]             is time     'event time
+eclient[]            is alpha    'event client id
+eser[]               is binary   'event service code
+eduration[]          is time     'event staff duration
+eclient-duration[]   is time     'event client duration
+eru[]                is binary   'event RU
+eproj[]              is binary   'event project code
+elocation[]          is alpha    'event location code
+efs[]                is binary   'event funding source
+eatt[]               is alpha    'event attendance code
+erecip[]             is alpha    'event recipient code
+ebillFlag[]          is alpha    'event billing flag
+ecompFee[]           is numeric  'event computed fee
+ekey[]               is alpha    'event key
+
+numclients           is binary   'total number of clients
+nbrevents            is binary   'Number of Events for a Client
+nbrclients           is numeric  'Number of Clients Read
+evtCreatedCtr        is numeric  'Number of Events Created
+foundEvent           is binary   'Flag for found a event
+
+eventloop            is binary   'Counter for Event Loop
+
+rc                   is binary   'Results of I/O calls
+WinNum               is binary   'holds the window number.
+done                 is alpha    'are we done asking input
+
+rollUpErKey          is alpha    'Event Key for existing Roll-Up Service
+startErKey           is alpha    'Event Key for first PE service
+endErKey             is alpha    'Event Key for last PE service
+erkeyIndex           is binary   'Saved Event Key array Index
+markErKey[]          is alpha    'Event Keys to mark when rolled up
+                     
+billedStaffTime      is binary   'Total Billed Staff Time
+billedClientTime     is binary   'Total Billed Client Time
+unbilledStfTime      is binary   'Total Unbilled Staff Time
+unbilledCltTime      is binary   'Total Unbilled Client Time
+
+'variable initializations
+$looplimit = 0       ' Max Number of Loops to Make
+nbrClients = 0       ' Initialize the Client count
+numClients = 0
+nbrEvents  = 0       ' Number of events for one client
+evtCreatedCtr = 0    ' Number of events created
+
+
+' Load the services codes that are valid
+arrayIndex = 0
+validServices[++arrayIndex] = billableSAC   ' Billable service (Always first)
+validServices[++arrayIndex] = 554           ' Non-billable service (PE)
+
+$openwin(WinNum, 5, 17, 15, 65)
+$disp( "Find PASRR Events", 6, 34,,"HE")
+$disp( "*****************", 7, 34,,"H")
+
+promptIdx = 1
+maxPrompts = 4
+do while promptIdx <= maxPrompts
+   select promptIdx
+      case 1
+         $disp( "Test(T) or Production Mode(P)?", 8, 18,,"H")
+         $acpt( runMode,  8, 50,,"X")
+      case 2
+         $disp( "Start Date:", 9, 18,,"H")
+         $acpt( startDate,     9, 41,,"DATE``PW")
+
+         'check if date range is valid
+         if  $acptkey <> "F9"
+         and startDate < $date("05/24/2013") then
+            $disp( "Must be after 05/23/2013.",13,18,50,"H")
+            $acptkey = "NO-ENTRY"
+         else
+            ' Clear the error message
+            $disp( "",13,18,50,"H")
+         endif
+
+      case 3
+         $disp( "End Date:", 10, 18,,"H")
+         $acpt( endDate,     10, 41,,"DATE``CW")
+
+          'check if date range is valid
+          if  $acptkey <> "F9"
+          and endDate < startDate then
+             $disp( "Invalid Date Range.",13,18,50,"H")
+             $acptkey = "NO-ENTRY"
+          else
+             ' Clear the error message
+             $disp( "",13,18,50,"H")
+          endif
+      case 4
+         $disp( "Finished?", 12, 18,,"H")
+         $acpt( done,        12, 41, 1,"YN")
+      case other
+         $errmsg1 = "Went past end of prompts"
+         return      ' Exit this script
+   endselect
+
+      ' check end key
+   select $acptkey
+      case "NO-ENTRY"         ' No User Input
+      case "F9"
+         promptIdx--       ' Go back a prompt
+         if promptIdx < 1 then
+            return            ' Exit this program
+         endif
+      case other
+         promptIdx++       ' Next Prompt
+   endselect
+enddo
+$disp( "=================================================",13,16,50,"H")
+
+if $uc(done) = "N" then
+    $closewin(WinNum)   ' Close the Text window
+   return      ' Exit this script
+endif
+
+
+'PQ Report
+$clear(hdr[])
+if (runMode = "P") then
+   hdr[1] = "Date: ^DATE^^C^PASRR Billing Report^R^Page: ^PAGE^"                        ' Header Line 1
+elseif (runMode = "T") then
+   hdr[1] = "Date: ^DATE^^C^PASRR Billing Report (Test Mode)^R^Page: ^PAGE^"            ' Header Line 1
+endif
+hdr[2] = "Time: ^TIME^^C^" + $format(startDate, endDate, "MM/DD/YY-MM/DD/YY")       ' Header Line 2
+hdr[3] = ""                               ' Header Blank Line
+hdr[4] = "Client    Staff    Date    Time  Ser  SDur  CDur   RU  Loc Computed Fee FS  ATT  RC  Proj BFlg      ER-Key"
+hdr[5] = "*-------* *----* *------* *----* *--* *---* *----* *-* *-* *----------* *-* *-* *--* *--* *--* *-------------------*"
+
+'open report - 60 lines per page
+reportNbr = $reportavail()
+if reportNbr = 0 then
+    $errmsg1 = "Unable to get a report number"
+    return
+else
+    if $report(reportNbr,"PASRR Billing Report",hdr[],60,132) != 0 then
+        $errmsg1 = "Unable to create a report"
+        return
+    endif
+endif
+
+'display prompt
+$disp( "Find PASRR Events", 6, 34,,"HE")
+$disp( "*****************", 7, 34,,"H")
+$disp("Getting the Client List...", 16,18,,"H")
+
+rc = $eventclients(clientIds[], startDate, endDate, "IB")
+if rc > 0 then
+    select rc
+        case 1      $errmsg1 = "Sorry... No services found for that date range"
+        case 2      $errmsg1 = "Too many clients found... use smaller date range"
+        case 3      $errmsg1 = "Please correct your date range"
+        case other  $errmsg1 = $format(rc, "Unknown error (99)... please contact IT")
+    endselect
+    return
+endif
+
+'*******************************************************************************
+'Display title
+$disp("No of Clients to Process : ", 8,18,,"H")
+$disp("       Clients Processed : ", 9,18,,"H")
+$disp("     Total Events Created: ",10,18,,"H")
+$disp("=================================================",11,16,,"H")
+$disp("          Current Client : ",12,18,,"H")
+$disp("     Total No. of Events : ",13,18,,"H")
+'$disp("          Events created : ",14,18,,"H")
+$disp("=================================================",15,16,,"H")
+$disp("Please wait while the events are created...",16,18,,"H")
+
+'get number of clients
+numclients = $maxarray(clientIds[])
+$disp($format(numclients, "ZZZ,ZZ9"), 8,45,,)
+
+
+'loop through each client in array
+nbrclients = 0
+do while (++nbrclients <= numclients)
+
+   $disp($format(nbrclients, "ZZZ,ZZ9"), 9,45,,)
+   $disp(clientIds[nbrclients],12,45,,)
+
+   'do not process group ids
+   if clientIds[nbrclients] < "A" then
+      ' Clear the flags
+      $clear(rollUpErKey, startErKey, endErKey, markErKey[])
+      erkeyIndex = 0          ' Saved ER key index
+      billedStaffTime = 0     ' Total Billed Time for Roll-Up
+      billedClientTime = 0    ' Total Billed Time for Roll-Up
+      unbilledStfTime = 0     ' Total UnBilled Time for Roll-Up
+      unbilledCltTime = 0     ' Total UnBilled Time for Roll-Up
+
+      'reset the loop count
+      $loopcount = 0
+      $clear(estaff[],edate[],edesc[],estart[],eclient[],eser[],eduration[],eclient-duration[],eru[],eproj[],elocation[],efs[],eatt[],erecip[],ecompFee[],ebillFlag[],ekey[])
+
+      rc = $ertoarray(,clientIds[nbrclients],startDate,endDate,estaff[],,,edate[],estart[],eclient[],,,eser[],eduration[],,eclient-duration[],eru[],eproj[],elocation[],,,ekey[],,,,efs[],,eatt[],erecip[],,,,ecompFee[],,ebillFlag[],,,,,,,,,,,,,,edesc[])
+      (void)$sort(edate[],"D",estart[],"D",eclient[],eduration[],"D",ekey[],eser[],eclient-duration[],estaff[],eru[],eproj[],elocation[],efs[],eatt[],erecip[],ecompFee[],ebillFlag[],edesc[])
+
+      if (rc = 0) then 'process only if events found
+
+         'calculate number of events for the current client
+         nbrevents = $maxarray(estaff[])
+         
+         'display prompts on window.
+         $disp($format( nbrevents, "ZZZ,ZZ9"),13,45,,)
+         '$disp($format( 0,         "ZZZ,ZZ9"),14,45,,)
+         
+         foundEvent = 0
+          
+         'Remove non-valid service codes from the arrays
+         eventloop = 0
+         do while eventloop++ < nbrevents
+
+            ' Look for valid services
+            if $find( eser[eventloop], validServices[],, "F") > 0 then
+               foundEvent++
+               ' Show the services
+               WriteEvents(reportNbr, clientIds[nbrclients], estaff[eventloop], edesc[eventloop],edate[eventloop], estart[eventloop],
+                                  eser[eventloop],eduration[eventloop],eclient-duration[eventloop],eru[eventloop],eproj[eventloop],
+                                  elocation[eventloop],efs[eventloop],eatt[eventloop],erecip[eventloop],ebillflag[eventloop],
+                                  ecompFee[eventloop],$erkeyx(ekey[eventloop]))
+                                  
+               ' Check for Rolled Up Service
+               if (eser[eventloop] = billableSAC) then
+                   ' Save the Roll-Up Event Key
+                   rollUpErKey = $erkeyx(ekey[eventloop],)
+
+               ' Must be one of the services to roll-up
+               else
+                  ' Is it a start/stop service
+                  if(eduration[eventloop] = 0
+                  and eclient-duration[eventloop] = 0
+                  and erecip[eventloop] = "9"
+                  and eatt[eventloop] = "9"
+                  and elocation[eventloop] = "1") then
+                     ' Is it the start or stop key
+                     if (endErKey !DP) then
+                         endErKey = $erkeyx(ekey[eventloop],)
+                     else
+                        startErKey = $erkeyx(ekey[eventloop],)
+                        
+                        ' If we have a roll-up event check for errors
+                        if (rollUpErKey DP) then
+                            checkTimes(reportnbr, rollUpErKey, billedStaffTime, billedClientTime, unbilledStfTime, unbilledCltTime)
+                        else
+                            ' Create Roll Up Service
+                            rc = createNewEvent(reportnbr, runMode, markErKey[1], unbilledStfTime, unbilledCltTime)
+                            ' did we create a event
+                            if (rc = 0) then
+                                evtCreatedCtr++
+                                ' mark the original services as billed
+                                markEventsBilled(reportNbr, markErKey[])
+                            endif
+                        endif
+                        ' Reset the flags
+                        $clear(rollUpErKey, startErKey, endErKey, markErKey[])
+                        erkeyIndex = 0          ' Index for saved keys
+                        billedStaffTime = 0     ' Total Billed Time for Roll-Up
+                        billedClientTime = 0    ' Total Billed Time for Roll-Up
+                        unbilledStfTime = 0     ' Total UnBilled Time for Roll-Up
+                        unbilledCltTime = 0     ' Total UnBilled Time for Roll-Up
+                     endif
+
+                  ' Not one of the start/stop services
+                  else
+                     ' Is it the start or stop key
+                     if (endErKey DP) then
+                        ' Must be a service to roll-up
+                        if (ebillflag[eventloop] = "Y") then
+                           billedStaffTime  += eduration[eventloop]
+                           billedClientTime += eclient-duration[eventloop]
+                        else
+                           unbilledStfTime += eduration[eventloop]
+                           unbilledCltTime += eclient-duration[eventloop]
+                           
+                           ' Save the event Key
+                           markErKey[++erkeyIndex] = $erkeyx(ekey[eventloop])
+                        endif
+                     else
+                         (void) $print(reportNbr, "ERROR: Service outside of start/end markers")
+                     endif   ' End of have endErKey
+                  endif   ' End of not start/stop service
+               endif   ' End of Billable Service code
+            endif   ' End of Valid Service
+         enddo   'end loop through events
+         
+         'Do we have any events left for this client?
+         if (foundEvent > 0) then
+            (void) $print(reportNbr, "")    ' Blank line
+         endif   ' end of have events
+         
+         'update no. of events processed.
+         MsgString = $format( evtCreatedCtr, "ZZZ,ZZ9")
+         $disp(MsgString,10,45,,)
+   
+      endif 'end process only if events found
+   endif 'end do not process group ids if statement
+   
+   $clear(MsgString,PrintString)
+enddo 'end loop through clients
+nbrclients--    ' Fix Clients processed count
+
+'Print Overall Totals
+PrintString = $format(numclients,    "Number of Clients to Process: ZZZ,ZZ9")
+(void) $print(reportNbr, PrintString, "1")
+PrintString = $format(nbrclients,    "           Clients Processed: ZZZ,ZZ9")
+(void) $print(reportNbr, PrintString, "1")
+PrintString = $format(evtCreatedCtr, "        Total Events Created: ZZZ,ZZ9")
+(void) $print(reportNbr, PrintString, "1")
+
+'cleanup
+(void) $closereport(reportNbr)
+
+'Cleanup - Close Message Windows
+$disp("Done. Press the ENTER key to continue...    ",16,18,,"H")
+$acpt(done,16,58,1,)
+$closewin(WinNum) ' Close the Text window
+
+end PASRRBilling
+
+
+'***********************************************************************
+'*                           SUPPORTING FUNCTIONS                      *
+'***********************************************************************
+
+' this function is to check the staff/client duration of the existing
+' rolled up service with the times calculated.  The billed time should
+' match w/ the rolled up service.  There should not be any unbilled time.
+function checkTimes(reportnbr, rollUpErKey, billedStaffTime, billedClientTime, unbilledStfTime, unbilledCltTime) is null
+
+    reportNbr       is binary   ' Report Handle
+    rollUpErKey     is alpha    ' Event Key
+    billedStaffTime is binary   ' Billed Staff Duration
+    billedClienttime is binary  ' Billed Client Duration
+    unbilledStfTime is binary   ' UnBilled Staff Duration
+    unbilledCltTime is binary   ' Unbilled Client Duration
+
+    rc              is binary   ' Function return code
+    reportMessage   is alpha    ' Report line message
+    
+    'Event DSTs
+    E.PROJ        is binary
+    E.LOC         is alpha
+    E.BILL.ST     is alpha    
+    E.POST.FLG    is alpha
+    E.BILL.FLG    is alpha
+    E.SER         is binary
+    E.CASE.NO     is alpha
+    E.STAFF        is alpha
+    E.DATE        is date
+    E.RU       is binary
+    E.DUR         is time
+    E.START        is time
+    E.CL.DUR      is time
+    E.RECIP        is alpha
+    E.ATT         is alpha
+    E.FS       is binary
+    E.DESC        is alpha
+    E.COMP.FEE    is numeric
+
+    ' Get the requested Event
+    $erkey = $erkeyn(rollUpErKey)
+    rc = $readevent(E.PROJ, E.LOC, E.BILL.ST, E.POST.FLG, E.BILL.FLG, E.SER, E.CASE.NO, E.STAFF, E.DATE, E.RU, E.DUR, E.START, E.CL.DUR, E.RECIP, E.ATT, E.FS, E.DESC, E.COMP.FEE)
+    if (rc = 0) then
+        reportMessage = $format( rc, "ERROR: Unable to get the Rolled Up service... rc=99")
+        (void) $print(reportNbr, reportMessage)
+    else
+        WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, E.CL.DUR, E.RU, E.PROJ, E.LOC, E.FS, E.ATT, E.RECIP, E.BILL.FLG, E.COMP.FEE, rollUpErKey)
+
+        ' check for billed time errors
+        if (billedStaffTime  != E.DUR
+         or billedClientTime != E.CL.DUR) then
+            reportMessage = "ERROR: Billed times for rolled up services does not match calculated time"
+            (void) $print(reportNbr, reportMessage)
+        endif
+        
+        ' We have service not included in the rolled up service
+        if (unbilledStfTime > 0
+         or unbilledCltTime > 0) then
+            reportMessage = "ERROR: There are events that were not included in the rolled up service time"
+            (void) $print(reportNbr, reportMessage)
+        endif
+    endif
+end checkTimes
+
+function createNewEvent(reportnbr, runMode, rollUpErKey, unbilledStfTime, unbilledCltTime) is binary
+
+    reportNbr       is binary   ' Report Handle
+    runMode         is alpha    ' Run Mode (T=Test / P=Production)
+    rollUpErKey     is alpha    ' Event Key
+    unbilledStfTime is binary   ' UnBilled Staff Duration
+    unbilledCltTime is binary   ' Unbilled Client Duration
+
+    rc              is binary   ' Function return code
+    reportMessage   is alpha    ' Report line message
+    
+    'Event DSTs
+    E.PROJ        is binary
+    E.LOC         is alpha
+    E.SER         is binary
+    E.CASE.NO     is alpha
+    E.STAFF        is alpha
+    E.DATE        is date
+    E.RU       is binary
+    E.DUR         is time
+    E.START        is time
+    E.CL.DUR      is time
+    E.RECIP        is alpha
+    E.ATT         is alpha
+    E.FS       is binary
+    E.DESC        is alpha
+    E.COMP.FEE    is numeric
+
+    ' Get the requested Event
+    $erkey = $erkeyn(rollUpErKey)
+    rc = $readevent(E.PROJ, E.LOC, E.SER, E.CASE.NO, E.STAFF, E.DATE, E.RU, E.DUR, 
+                        E.START, E.CL.DUR, E.RECIP, E.ATT, E.FS, E.DESC, E.COMP.FEE)
+    if (rc > 0) then
+        reportMessage = $format( rc, rollUpErKey, "ERROR: Unable to get the last roll up service... rc=99 (L~~~~~~~~~~~~~~~~~~~~)")
+        (void) $print(reportNbr, reportMessage)
+    else
+        ' Update the event info
+        E.DUR    = 0 + unbilledStfTime
+        E.CL.DUR = 0 + unbilledCltTime
+        E.COMP.FEE = 0.00
+        E.SER    = billableSAC
+        E.DESC   = "Billable PASRR PE"
+    
+        (void) $print(reportNbr, "==================================")   ' Separator
+        ' Write out the new event info    
+        WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, E.CL.DUR, E.RU, E.PROJ, E.LOC, E.FS, E.ATT, E.RECIP, "N", E.COMP.FEE,)
+
+        ' Create the new event
+        ' Are we in Production Mode
+        if (runMode = "P") then
+            rc = $insertevent(E.PROJ, E.LOC, E.SER, E.CASE.NO, E.STAFF, E.DATE, E.RU, E.DUR, 
+                                E.START, E.CL.DUR, E.RECIP, E.ATT, E.FS, E.DESC, E.COMP.FEE)
+            if rc > 0 then
+                ' Show the error message
+                reportMessage = $format(rc, "ERROR: unable to create a roll up Service... rc=99")
+                (void) $print(reportNbr, reportMessage)
+            endif
+        else
+            ' Fake an error if not in production.
+            rc = 99
+        endif
+    endif
+    (void) $print(reportNbr, "")
+    
+    createnewEvent = rc
+end createNewEvent
+
+
+'This function is to mark all the events as billed in the array.
+'Any event that can not be updated as billed will print out on the report.
+function markEventsBilled(reportNbr, markErKey[]) is null
+
+    reportNbr   is binary  'Report Handle
+    markErKey[] is alpha   'Event keys to mark as billed
+
+    erIndex     is binary   'Array Index
+    rc          is binary   'Function return code
+    reportMessage is alpha  'Report error message line
+    
+    'Event DSTs
+    E.PROJ     is binary
+    E.LOC      is alpha
+    E.BILL.FLG is alpha
+    E.SER      is binary
+    E.CASE.NO  is alpha
+    E.STAFF    is alpha
+    E.DATE     is date
+    E.RU    is binary
+    E.DUR      is time
+    E.START    is time
+    E.CL.DUR   is time
+    E.RECIP    is alpha
+    E.ATT      is alpha
+    E.FS    is binary
+    E.DESC     is alpha
+    E.COMP.FEE is numeric
+
+    erIndex = 0
+    do while erIndex++ < $maxarray(markErKey[])
+        ' Get the requested Event
+        $erkey = $erkeyn(markErKey[erIndex])
+        $erlock()   ' Try to lock the event
+        rc = $readevent(E.PROJ, E.LOC, E.BILL.FLG, E.SER, E.CASE.NO, E.STAFF, E.DATE, E.RU, E.DUR, 
+                            E.START, E.CL.DUR, E.RECIP, E.ATT, E.FS, E.DESC, E.COMP.FEE)
+        if (rc > 0) then
+            ' Write out the new event info    
+            WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, E.CL.DUR, E.RU, E.PROJ, E.LOC, E.FS, E.ATT, E.RECIP, E.BILL.FLG, E.COMP.FEE, markErKey[erIndex])
+            reportMessage = $format( rc, "ERROR: Unable to find the original service... rc=99")
+            (void) $print(reportNbr, reportMessage)
+        else
+            ' Update the event info
+            E.BILL.FLG = "Y"
+            rc = $updateeventxx(E.BILL.FLG)
+            if (rc > 0) then
+                ' Write out the new event info    
+                WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, E.CL.DUR, E.RU, E.PROJ, E.LOC, E.FS, E.ATT, E.RECIP, E.BILL.FLG, E.COMP.FEE, markErKey[erIndex])
+                reportMessage = $format( rc, "ERROR: Unable to mark the service as billed... rc=99")
+                (void) $print(reportNbr, reportMessage)
+            endif
+        endif
+    enddo
+end markEventsBilled
+
+'This is the main routine to print out the event information on a report
+function WriteEvents(reportNbr,clientID,newStaff,newDesc,newDate,newStart,newSer,newStfDur,newClntDur,newRu,newProj,
+                        newLocation,newFs,newAtt,newRecip,newBillFlag,newCompFee, newerkey) is null
+
+   reportNbr    is      binary  'Report Handle
+   clientID     is       alpha   'event Client ID
+   newStaff     is       alpha   'event staff ID
+   newDesc      is      alpha   'event description
+   newDate      is      date    'event service date
+   newStart     is      time    'event service start time
+   newSer       is      binary   'event service code
+   newStfDur   is    time  'event staff duration
+   newClntDur  is        time 'event client duration 
+   newRu        is      binary   'event RU
+   newProj      is      binary  'event project code
+   newLocation is    alpha 'event location code
+   newFs        is      binary  'event funding source
+   newAtt       is      alpha   'event attendance code
+   newRecip     is      alpha   'event recipient code
+   newBillFlag is    alpha 'event billing flag
+   newCompFee   is      numeric  'event computed fee
+   newerkey     is      alpha   'event erkey
+
+      'Local variables
+   PrintString is    alpha   'Output Concatenation String
+   fmt           is      alpha
+
+   fmt =    "L~~~~~~~~ L~~~~~ MM/DD/YY  HH:MM ZZZZ HH:MM HH:MM  ZZZ  ~~~ Z,ZZ9.99   ZZZ   ~   ~  ZZZZ   ~   L~~~~~~~~~~~~~~~~~~~~" 
+   PrintString = $format(clientID,newStaff,newDate,newStart,newSer,newStfDur,newClntDur,newRu,newLocation,
+                            newCompFee,newFs,newAtt,newRecip,newProj,newBillFlag,newerkey,fmt)
+   (void)$print(reportNbr,PrintString,"1")
+  
+end WriteEvents
+
+'***********************************************************************
+'*                       END SUPPORTING FUNCTIONS                      *
+'***********************************************************************
