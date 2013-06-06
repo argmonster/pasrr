@@ -41,10 +41,21 @@
 '   00033  E.RECIP          - Recipient code
 '   00034  E.LOC            - Location Code
 '   00035  E.PROJ           - Project Code
+'=================================================
+'    Updates
+'=================================================
+'  Bob 6/6/2013 0.1
+'     + errors for when we don’t have the two wrapper services.
+'     + Marking the wrapper services as being billed
+'     Todo:
+'        ~ Rolling up the IDT time that could be up to 14 days after the PE referral date.
+'        ~ Edit for Test/Production prompt
+
 
 %const billableSAC 555      ' Service code for Billable Service
+%const MaxPEDays 14         ' Maximum days for PE to be complete
 
-
+%version 0.1 6/6/2013
 start PASRRBilling()
 
 '$trace("path", $scriptid) $trace("on")
@@ -101,6 +112,7 @@ done                 is alpha    'are we done asking input
 rollUpErKey          is alpha    'Event Key for existing Roll-Up Service
 startErKey           is alpha    'Event Key for first PE service
 endErKey             is alpha    'Event Key for last PE service
+endErDate            is date     'Event last PE service date
 erkeyIndex           is binary   'Saved Event Key array Index
 markErKey[]          is alpha    'Event Keys to mark when rolled up
                      
@@ -192,7 +204,7 @@ endif
 $clear(hdr[])
 if (runMode = "P") then
    hdr[1] = "Date: ^DATE^^C^PASRR Billing Report^R^Page: ^PAGE^"                        ' Header Line 1
-elseif (runMode = "T") then
+else
    hdr[1] = "Date: ^DATE^^C^PASRR Billing Report (Test Mode)^R^Page: ^PAGE^"            ' Header Line 1
 endif
 hdr[2] = "Time: ^TIME^^C^" + $format(startDate, endDate, "MM/DD/YY-MM/DD/YY")       ' Header Line 2
@@ -255,7 +267,7 @@ do while (++nbrclients <= numclients)
    'do not process group ids
    if clientIds[nbrclients] < "A" then
       ' Clear the flags
-      $clear(rollUpErKey, startErKey, endErKey, markErKey[])
+        $clear(rollUpErKey, startErKey, endErKey, markErKey[], endErDate)
       erkeyIndex = 0          ' Saved ER key index
       billedStaffTime = 0     ' Total Billed Time for Roll-Up
       billedClientTime = 0    ' Total Billed Time for Roll-Up
@@ -264,10 +276,14 @@ do while (++nbrclients <= numclients)
 
       'reset the loop count
       $loopcount = 0
-      $clear(estaff[],edate[],edesc[],estart[],eclient[],eser[],eduration[],eclient-duration[],eru[],eproj[],elocation[],efs[],eatt[],erecip[],ecompFee[],ebillFlag[],ekey[])
+        $clear(estaff[],edate[],edesc[],estart[],eclient[],eser[],eduration[],eclient-duration[],eru[],eproj[],
+                        elocation[],efs[],eatt[],erecip[],ecompFee[],ebillFlag[],ekey[])
 
-      rc = $ertoarray(,clientIds[nbrclients],startDate,endDate,estaff[],,,edate[],estart[],eclient[],,,eser[],eduration[],,eclient-duration[],eru[],eproj[],elocation[],,,ekey[],,,,efs[],,eatt[],erecip[],,,,ecompFee[],,ebillFlag[],,,,,,,,,,,,,,edesc[])
-      (void)$sort(edate[],"D",estart[],"D",eclient[],eduration[],"D",ekey[],eser[],eclient-duration[],estaff[],eru[],eproj[],elocation[],efs[],eatt[],erecip[],ecompFee[],ebillFlag[],edesc[])
+        rc = $ertoarray(,clientIds[nbrclients],startDate,endDate,estaff[],,,edate[],estart[],eclient[],,,eser[],
+                            eduration[],,eclient-duration[],eru[],eproj[],elocation[],,,ekey[],,,,efs[],,eatt[],
+                            erecip[],,,,ecompFee[],,ebillFlag[],,,,,,,,,,,,,,edesc[])
+        (void)$sort(edate[],"D",estart[],"D",eclient[],eduration[],"D",ekey[],eser[],eclient-duration[],estaff[],
+                            eru[],eproj[],elocation[],efs[],eatt[],erecip[],ecompFee[],ebillFlag[],edesc[])
 
       if (rc = 0) then 'process only if events found
 
@@ -306,9 +322,13 @@ do while (++nbrclients <= numclients)
                   and erecip[eventloop] = "9"
                   and eatt[eventloop] = "9"
                   and elocation[eventloop] = "1") then
+                     ' Save the event Key
+                     markErKey[++erkeyIndex] = $erkeyx(ekey[eventloop])
+
                      ' Is it the start or stop key
                      if (endErKey !DP) then
                          endErKey = $erkeyx(ekey[eventloop],)
+                         endErDate = edate[eventloop] - MaxPEDays
                      else
                         startErKey = $erkeyx(ekey[eventloop],)
                         
@@ -326,13 +346,26 @@ do while (++nbrclients <= numclients)
                             endif
                         endif
                         ' Reset the flags
-                        $clear(rollUpErKey, startErKey, endErKey, markErKey[])
+                        $clear(rollUpErKey, startErKey, endErKey, markErKey[], endErDate)
                         erkeyIndex = 0          ' Index for saved keys
                         billedStaffTime = 0     ' Total Billed Time for Roll-Up
                         billedClientTime = 0    ' Total Billed Time for Roll-Up
                         unbilledStfTime = 0     ' Total UnBilled Time for Roll-Up
                         unbilledCltTime = 0     ' Total UnBilled Time for Roll-Up
                      endif
+                  
+                  ' Outside the PE Maximum allowed days?
+                  elseif (endErKey DP  and  edate[eventloop] < endErDate) then
+                     ' Report an error & clear the array
+                     (void) $print(reportNbr, "ERROR: Unable to find starting service marker")
+
+                     ' Reset the flags
+                     $clear(rollUpErKey, startErKey, endErKey, markErKey[], endErDate)
+                     erkeyIndex = 0          ' Index for saved keys
+                     billedStaffTime = 0     ' Total Billed Time for Roll-Up
+                     billedClientTime = 0    ' Total Billed Time for Roll-Up
+                     unbilledStfTime = 0     ' Total UnBilled Time for Roll-Up
+                     unbilledCltTime = 0     ' Total UnBilled Time for Roll-Up
 
                   ' Not one of the start/stop services
                   else
@@ -433,12 +466,14 @@ function checkTimes(reportnbr, rollUpErKey, billedStaffTime, billedClientTime, u
 
     ' Get the requested Event
     $erkey = $erkeyn(rollUpErKey)
-    rc = $readevent(E.PROJ, E.LOC, E.BILL.ST, E.POST.FLG, E.BILL.FLG, E.SER, E.CASE.NO, E.STAFF, E.DATE, E.RU, E.DUR, E.START, E.CL.DUR, E.RECIP, E.ATT, E.FS, E.DESC, E.COMP.FEE)
+    rc = $readevent(E.PROJ, E.LOC, E.BILL.ST, E.POST.FLG, E.BILL.FLG, E.SER, E.CASE.NO, E.STAFF, E.DATE, E.RU, E.DUR, 
+                        E.START, E.CL.DUR, E.RECIP, E.ATT, E.FS, E.DESC, E.COMP.FEE)
     if (rc = 0) then
         reportMessage = $format( rc, "ERROR: Unable to get the Rolled Up service... rc=99")
         (void) $print(reportNbr, reportMessage)
     else
-        WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, E.CL.DUR, E.RU, E.PROJ, E.LOC, E.FS, E.ATT, E.RECIP, E.BILL.FLG, E.COMP.FEE, rollUpErKey)
+        WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, E.CL.DUR, E.RU, E.PROJ, 
+                                E.LOC, E.FS, E.ATT, E.RECIP, E.BILL.FLG, E.COMP.FEE, rollUpErKey)
 
         ' check for billed time errors
         if (billedStaffTime  != E.DUR
@@ -493,15 +528,16 @@ function createNewEvent(reportnbr, runMode, rollUpErKey, unbilledStfTime, unbill
         (void) $print(reportNbr, reportMessage)
     else
         ' Update the event info
-        E.DUR    = 0 + unbilledStfTime
-        E.CL.DUR = 0 + unbilledCltTime
+        E.DUR    = unbilledStfTime
+        E.CL.DUR = unbilledCltTime
         E.COMP.FEE = 0.00
         E.SER    = billableSAC
         E.DESC   = "Billable PASRR PE"
     
         (void) $print(reportNbr, "==================================")   ' Separator
         ' Write out the new event info    
-        WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, E.CL.DUR, E.RU, E.PROJ, E.LOC, E.FS, E.ATT, E.RECIP, "N", E.COMP.FEE,)
+        WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, 
+                                E.CL.DUR, E.RU, E.PROJ, E.LOC, E.FS, E.ATT, E.RECIP, "N", E.COMP.FEE,)
 
         ' Create the new event
         ' Are we in Production Mode
@@ -562,7 +598,8 @@ function markEventsBilled(reportNbr, markErKey[]) is null
                             E.START, E.CL.DUR, E.RECIP, E.ATT, E.FS, E.DESC, E.COMP.FEE)
         if (rc > 0) then
             ' Write out the new event info    
-            WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, E.CL.DUR, E.RU, E.PROJ, E.LOC, E.FS, E.ATT, E.RECIP, E.BILL.FLG, E.COMP.FEE, markErKey[erIndex])
+            WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, E.CL.DUR, E.RU, E.PROJ, 
+                                    E.LOC, E.FS, E.ATT, E.RECIP, E.BILL.FLG, E.COMP.FEE, markErKey[erIndex])
             reportMessage = $format( rc, "ERROR: Unable to find the original service... rc=99")
             (void) $print(reportNbr, reportMessage)
         else
@@ -571,7 +608,8 @@ function markEventsBilled(reportNbr, markErKey[]) is null
             rc = $updateeventxx(E.BILL.FLG)
             if (rc > 0) then
                 ' Write out the new event info    
-                WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, E.CL.DUR, E.RU, E.PROJ, E.LOC, E.FS, E.ATT, E.RECIP, E.BILL.FLG, E.COMP.FEE, markErKey[erIndex])
+                WriteEvents(reportNbr, E.CASE.NO, E.STAFF, E.DESC, E.DATE, E.START, E.SER, E.DUR, E.CL.DUR, E.RU, E.PROJ, 
+                                        E.LOC, E.FS, E.ATT, E.RECIP, E.BILL.FLG, E.COMP.FEE, markErKey[erIndex])
                 reportMessage = $format( rc, "ERROR: Unable to mark the service as billed... rc=99")
                 (void) $print(reportNbr, reportMessage)
             endif
