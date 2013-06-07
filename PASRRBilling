@@ -4,14 +4,18 @@
 '        service code 554 event between two events with the same service
 '        code that has zero client & staff time, recipient code of 9,
 '        attendance code of 9, number of recipients equal to 0, &
-'        a location code of one.  It will roll up the client & staff time
+'        a location code of 1.  It will roll up the client & staff time
 '        for all the services between the starting & ending service & 
-'        create a new service that looks like the ending service, but with
-'        a service code of 555 & the total client & staff time'
+'        create a new service that looks like the last service, but with
+'        a service code of 555 (changeable), the total client, & staff time.
 '
 '        It has been placed on menu ### line ##.  Reference Heat ticket ######.
 '=================================================
 '    ASSUMPTIONS
+'       There are two serices that match the above critera that box/enclose the
+'       services that need to be rolled-up.  Services found out side of the
+'       box/enclose events are concidered errors.  The services should not be
+'       more than 14 (changeable) days.
 '=================================================
 '    PARAMETERS
 '        NONE
@@ -50,7 +54,10 @@
 '     Todo:
 '        ~ Rolling up the IDT time that could be up to 14 days after the PE referral date.
 '        ~ Edit for Test/Production prompt
-
+'
+'  Bob 6/6/2013 0.1.1
+'     + edit for the test / production prompt
+'     ^ fixed problem with the checkTimes()
 
 %const billableSAC 555      ' Service code for Billable Service
 %const MaxPEDays 14         ' Maximum days for PE to be complete
@@ -70,6 +77,9 @@ arrayIndex           is binary   'Array Index pointer
 runMode              is alpha    'Production/Test indicator
 startDate            is date     'Start Date of events being pulled
 endDate              is date     'End Date of events being pulled
+runModeEdit         is alpha    'Associate code&descriptions to runMode variable
+startDate      		is date     'Start Date of events being pulled
+endDate        		is date     'End Date of events being pulled
 
 MsgString            is alpha    'Temporary String
 
@@ -115,11 +125,11 @@ endErKey             is alpha    'Event Key for last PE service
 endErDate            is date     'Event last PE service date
 erkeyIndex           is binary   'Saved Event Key array Index
 markErKey[]          is alpha    'Event Keys to mark when rolled up
-                     
-billedStaffTime      is binary   'Total Billed Staff Time
-billedClientTime     is binary   'Total Billed Client Time
-unbilledStfTime      is binary   'Total Unbilled Staff Time
-unbilledCltTime      is binary   'Total Unbilled Client Time
+
+billedStaffTime     is binary   'Total Billed Staff Time
+billedClientTime    is binary   'Total Billed Client Time
+unbilledStfTime     is binary   'Total Unbilled Staff Time
+unbilledCltTime     is binary   'Total Unbilled Client Time
 
 'variable initializations
 $looplimit = 0       ' Max Number of Loops to Make
@@ -133,6 +143,13 @@ evtCreatedCtr = 0    ' Number of events created
 arrayIndex = 0
 validServices[++arrayIndex] = billableSAC   ' Billable service (Always first)
 validServices[++arrayIndex] = 554           ' Non-billable service (PE)
+
+' build edit for Test/Production runMode
+promptIdx = 0
+$clear(modeCode[], modeDesc[])
+modeCode[++promptIdx] = "T"     modeDesc[promptIdx] = "Test"
+modeCode[++promptIdx] = "P"     modeDesc[promptIdx] = "Production"
+(void) $edittbl(runModeEdit,runMode,modeCode[],modeDesc[],"Run Mode")
 
 $openwin(WinNum, 5, 17, 15, 65)
 $disp( "Find PASRR Events", 6, 34,,"HE")
@@ -267,7 +284,7 @@ do while (++nbrclients <= numclients)
    'do not process group ids
    if clientIds[nbrclients] < "A" then
       ' Clear the flags
-        $clear(rollUpErKey, startErKey, endErKey, markErKey[], endErDate)
+      $clear(rollUpErKey, startErKey, endErKey, markErKey[], endErDate)
       erkeyIndex = 0          ' Saved ER key index
       billedStaffTime = 0     ' Total Billed Time for Roll-Up
       billedClientTime = 0    ' Total Billed Time for Roll-Up
@@ -276,20 +293,20 @@ do while (++nbrclients <= numclients)
 
       'reset the loop count
       $loopcount = 0
-        $clear(estaff[],edate[],edesc[],estart[],eclient[],eser[],eduration[],eclient-duration[],eru[],eproj[],
+      $clear(estaff[],edate[],edesc[],estart[],eclient[],eser[],eduration[],eclient-duration[],eru[],eproj[],
                         elocation[],efs[],eatt[],erecip[],ecompFee[],ebillFlag[],ekey[])
 
-        rc = $ertoarray(,clientIds[nbrclients],startDate,endDate,estaff[],,,edate[],estart[],eclient[],,,eser[],
+      rc = $ertoarray(,clientIds[nbrclients],startDate,endDate,estaff[],,,edate[],estart[],eclient[],,,eser[],
                             eduration[],,eclient-duration[],eru[],eproj[],elocation[],,,ekey[],,,,efs[],,eatt[],
                             erecip[],,,,ecompFee[],,ebillFlag[],,,,,,,,,,,,,,edesc[])
-        (void)$sort(edate[],"D",estart[],"D",eclient[],eduration[],"D",ekey[],eser[],eclient-duration[],estaff[],
+      (void)$sort(edate[],"D",estart[],"D",eclient[],eduration[],"D",ekey[],eser[],eclient-duration[],estaff[],
                             eru[],eproj[],elocation[],efs[],eatt[],erecip[],ecompFee[],ebillFlag[],edesc[])
 
       if (rc = 0) then 'process only if events found
 
          'calculate number of events for the current client
          nbrevents = $maxarray(estaff[])
-         
+	
          'display prompts on window.
          $disp($format( nbrevents, "ZZZ,ZZ9"),13,45,,)
          '$disp($format( 0,         "ZZZ,ZZ9"),14,45,,)
@@ -314,95 +331,96 @@ do while (++nbrclients <= numclients)
                    ' Save the Roll-Up Event Key
                    rollUpErKey = $erkeyx(ekey[eventloop],)
 
-               ' Must be one of the services to roll-up
-               else
-                  ' Is it a start/stop service
-                  if(eduration[eventloop] = 0
-                  and eclient-duration[eventloop] = 0
-                  and erecip[eventloop] = "9"
-                  and eatt[eventloop] = "9"
-                  and elocation[eventloop] = "1") then
-                     ' Save the event Key
-                     markErKey[++erkeyIndex] = $erkeyx(ekey[eventloop])
 
-                     ' Is it the start or stop key
-                     if (endErKey !DP) then
-                         endErKey = $erkeyx(ekey[eventloop],)
-                         endErDate = edate[eventloop] - MaxPEDays
-                     else
-                        startErKey = $erkeyx(ekey[eventloop],)
-                        
-                        ' If we have a roll-up event check for errors
-                        if (rollUpErKey DP) then
-                            checkTimes(reportnbr, rollUpErKey, billedStaffTime, billedClientTime, unbilledStfTime, unbilledCltTime)
-                        else
-                            ' Create Roll Up Service
-                            rc = createNewEvent(reportnbr, runMode, markErKey[1], unbilledStfTime, unbilledCltTime)
-                            ' did we create a event
-                            if (rc = 0) then
-                                evtCreatedCtr++
-                                ' mark the original services as billed
-                                markEventsBilled(reportNbr, markErKey[])
+                    ' Must be one of the services to roll-up
+                    else
+                        ' Is it a start/stop service
+                        if(eduration[eventloop] = 0
+                        and  eclient-duration[eventloop] = 0
+                        and  erecip[eventloop] = "9"
+                        and  eatt[eventloop] = "9"
+                        and  elocation[eventloop] = "1") then
+                            ' Save the event Key
+                            markErKey[++erkeyIndex] = $erkeyx(ekey[eventloop])
+
+                            ' Is it the start or stop key
+                            if (endErKey !DP) then
+                                endErKey = $erkeyx(ekey[eventloop],)
+                                endErDate = edate[eventloop] - MaxPEDays
+                            else
+                                startErKey = $erkeyx(ekey[eventloop],)
+                                
+                                ' If we have a roll-up event check for errors
+                                if (rollUpErKey DP) then
+                                    checkTimes(reportnbr, rollUpErKey, billedStaffTime, billedClientTime, unbilledStfTime, unbilledCltTime)
+                                else
+                                    ' Create Roll Up Service
+                                    rc = createNewEvent(reportnbr, runMode, markErKey[1], unbilledStfTime, unbilledCltTime)
+                                    ' did we create a event
+                                    if (rc = 0) then
+                                        evtCreatedCtr++
+                                        ' mark the original services as billed
+                                        markEventsBilled(reportNbr, markErKey[])
+                                    endif
+                                endif
+                                ' Reset the flags
+                                $clear(rollUpErKey, startErKey, endErKey, markErKey[], endErDate)
+                                erkeyIndex = 0          ' Index for saved keys
+                                billedStaffTime = 0     ' Total Billed Time for Roll-Up
+                                billedClientTime = 0    ' Total Billed Time for Roll-Up
+                                unbilledStfTime = 0     ' Total UnBilled Time for Roll-Up
+                                unbilledCltTime = 0     ' Total UnBilled Time for Roll-Up
                             endif
-                        endif
-                        ' Reset the flags
-                        $clear(rollUpErKey, startErKey, endErKey, markErKey[], endErDate)
-                        erkeyIndex = 0          ' Index for saved keys
-                        billedStaffTime = 0     ' Total Billed Time for Roll-Up
-                        billedClientTime = 0    ' Total Billed Time for Roll-Up
-                        unbilledStfTime = 0     ' Total UnBilled Time for Roll-Up
-                        unbilledCltTime = 0     ' Total UnBilled Time for Roll-Up
-                     endif
-                  
-                  ' Outside the PE Maximum allowed days?
-                  elseif (endErKey DP  and  edate[eventloop] < endErDate) then
-                     ' Report an error & clear the array
-                     (void) $print(reportNbr, "ERROR: Unable to find starting service marker")
 
-                     ' Reset the flags
-                     $clear(rollUpErKey, startErKey, endErKey, markErKey[], endErDate)
-                     erkeyIndex = 0          ' Index for saved keys
-                     billedStaffTime = 0     ' Total Billed Time for Roll-Up
-                     billedClientTime = 0    ' Total Billed Time for Roll-Up
-                     unbilledStfTime = 0     ' Total UnBilled Time for Roll-Up
-                     unbilledCltTime = 0     ' Total UnBilled Time for Roll-Up
+                        ' Outside the PE Maximum allowed days?
+                        elseif (endErKey DP  and  edate[eventloop] < endErDate) then
+                            ' Report an error & clear the array
+                            (void) $print(reportNbr, "ERROR: Unable to find starting service marker")
 
-                  ' Not one of the start/stop services
-                  else
-                     ' Is it the start or stop key
-                     if (endErKey DP) then
-                        ' Must be a service to roll-up
-                        if (ebillflag[eventloop] = "Y") then
-                           billedStaffTime  += eduration[eventloop]
-                           billedClientTime += eclient-duration[eventloop]
+                            ' Reset the flags
+                            $clear(rollUpErKey, startErKey, endErKey, markErKey[], endErDate)
+                            erkeyIndex = 0          ' Index for saved keys
+                            billedStaffTime = 0     ' Total Billed Time for Roll-Up
+                            billedClientTime = 0    ' Total Billed Time for Roll-Up
+                            unbilledStfTime = 0     ' Total UnBilled Time for Roll-Up
+                            unbilledCltTime = 0     ' Total UnBilled Time for Roll-Up
+                            
+                        ' Not one of the start/stop services
                         else
-                           unbilledStfTime += eduration[eventloop]
-                           unbilledCltTime += eclient-duration[eventloop]
-                           
-                           ' Save the event Key
-                           markErKey[++erkeyIndex] = $erkeyx(ekey[eventloop])
-                        endif
-                     else
-                         (void) $print(reportNbr, "ERROR: Service outside of start/end markers")
-                     endif   ' End of have endErKey
-                  endif   ' End of not start/stop service
-               endif   ' End of Billable Service code
-            endif   ' End of Valid Service
-         enddo   'end loop through events
-         
-         'Do we have any events left for this client?
-         if (foundEvent > 0) then
-            (void) $print(reportNbr, "")    ' Blank line
-         endif   ' end of have events
-         
-         'update no. of events processed.
-         MsgString = $format( evtCreatedCtr, "ZZZ,ZZ9")
-         $disp(MsgString,10,45,,)
-   
-      endif 'end process only if events found
-   endif 'end do not process group ids if statement
-   
-   $clear(MsgString,PrintString)
+                            ' Is it the start or stop key
+                            if (endErKey DP) then
+                                ' Must be a service to roll-up
+                                if (ebillflag[eventloop] = "Y") then
+                                    billedStaffTime  += eduration[eventloop]
+                                    billedClientTime += eclient-duration[eventloop]
+                                else
+                                    unbilledStfTime += eduration[eventloop]
+                                    unbilledCltTime += eclient-duration[eventloop]
+                                    
+                                    ' Save the event Key
+                                    markErKey[++erkeyIndex] = $erkeyx(ekey[eventloop])
+                                endif
+                            else
+                                (void) $print(reportNbr, "ERROR: Service outside of start/end markers")
+                            endif   ' End of have endErKey
+                        endif   ' End of not start/stop service
+                    endif   ' End of Billable Service code
+			    endif   ' End of Valid Service
+			enddo 'end loop through events
+	
+	        'Do we have any events left for this client?
+	        if (foundEvent > 0) then
+    			(void) $print(reportNbr, "")    ' Blank line
+    		endif   ' end of have events
+	
+			'update no. of events processed.
+			MsgString = $format( evtCreatedCtr, "ZZZ,ZZ9")
+			$disp(MsgString,10,45,,)
+	
+        endif 'end process only if events found
+    endif 'end do not process group ids if statement
+	
+    $clear(MsgString,PrintString)
 enddo 'end loop through clients
 nbrclients--    ' Fix Clients processed count
 
@@ -452,15 +470,15 @@ function checkTimes(reportnbr, rollUpErKey, billedStaffTime, billedClientTime, u
     E.BILL.FLG    is alpha
     E.SER         is binary
     E.CASE.NO     is alpha
-    E.STAFF        is alpha
+    E.STAFF       is alpha
     E.DATE        is date
-    E.RU       is binary
+    E.RU          is binary
     E.DUR         is time
-    E.START        is time
+    E.START       is time
     E.CL.DUR      is time
-    E.RECIP        is alpha
+    E.RECIP       is alpha
     E.ATT         is alpha
-    E.FS       is binary
+    E.FS          is binary
     E.DESC        is alpha
     E.COMP.FEE    is numeric
 
@@ -468,7 +486,7 @@ function checkTimes(reportnbr, rollUpErKey, billedStaffTime, billedClientTime, u
     $erkey = $erkeyn(rollUpErKey)
     rc = $readevent(E.PROJ, E.LOC, E.BILL.ST, E.POST.FLG, E.BILL.FLG, E.SER, E.CASE.NO, E.STAFF, E.DATE, E.RU, E.DUR, 
                         E.START, E.CL.DUR, E.RECIP, E.ATT, E.FS, E.DESC, E.COMP.FEE)
-    if (rc = 0) then
+    if (rc > 0) then
         reportMessage = $format( rc, "ERROR: Unable to get the Rolled Up service... rc=99")
         (void) $print(reportNbr, reportMessage)
     else
@@ -507,15 +525,15 @@ function createNewEvent(reportnbr, runMode, rollUpErKey, unbilledStfTime, unbill
     E.LOC         is alpha
     E.SER         is binary
     E.CASE.NO     is alpha
-    E.STAFF        is alpha
+    E.STAFF       is alpha
     E.DATE        is date
-    E.RU       is binary
+    E.RU          is binary
     E.DUR         is time
-    E.START        is time
+    E.START       is time
     E.CL.DUR      is time
-    E.RECIP        is alpha
+    E.RECIP       is alpha
     E.ATT         is alpha
-    E.FS       is binary
+    E.FS          is binary
     E.DESC        is alpha
     E.COMP.FEE    is numeric
 
@@ -579,13 +597,13 @@ function markEventsBilled(reportNbr, markErKey[]) is null
     E.CASE.NO  is alpha
     E.STAFF    is alpha
     E.DATE     is date
-    E.RU    is binary
+    E.RU       is binary
     E.DUR      is time
     E.START    is time
     E.CL.DUR   is time
     E.RECIP    is alpha
     E.ATT      is alpha
-    E.FS    is binary
+    E.FS       is binary
     E.DESC     is alpha
     E.COMP.FEE is numeric
 
@@ -622,21 +640,21 @@ function WriteEvents(reportNbr,clientID,newStaff,newDesc,newDate,newStart,newSer
                         newLocation,newFs,newAtt,newRecip,newBillFlag,newCompFee, newerkey) is null
 
    reportNbr    is      binary  'Report Handle
-   clientID     is       alpha   'event Client ID
-   newStaff     is       alpha   'event staff ID
+   clientID     is      alpha   'event Client ID
+   newStaff     is      alpha   'event staff ID
    newDesc      is      alpha   'event description
    newDate      is      date    'event service date
    newStart     is      time    'event service start time
    newSer       is      binary   'event service code
-   newStfDur   is    time  'event staff duration
-   newClntDur  is        time 'event client duration 
+   newStfDur   is       time     'event staff duration
+   newClntDur  is       time     'event client duration 
    newRu        is      binary   'event RU
    newProj      is      binary  'event project code
-   newLocation is    alpha 'event location code
+   newLocation is       alpha    'event location code
    newFs        is      binary  'event funding source
    newAtt       is      alpha   'event attendance code
    newRecip     is      alpha   'event recipient code
-   newBillFlag is    alpha 'event billing flag
+   newBillFlag is       alpha    'event billing flag
    newCompFee   is      numeric  'event computed fee
    newerkey     is      alpha   'event erkey
 
