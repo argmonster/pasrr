@@ -1,0 +1,187 @@
+'Template display engine for PASRR required mail notifications
+' supports multiple pages of letters
+'
+' Tim Markello
+' 6/272013
+' version 0.0
+'
+' Dependancies
+'  inc_GetParm
+'  inc_GetOption
+'  inc_uhp
+'  lib_DST
+'
+' load template pages sequentially with parm / option:
+'  ex; t_path-1 path/to/page/one
+'      t_path-2 paht/to/page/two
+'
+' engine will sequentially walk you back and forth through the pages using 'submit' and 'cancel' buttons
+'
+' use UHP <$literal /> to access templage variables 
+'
+' Supported template variables
+'  t_first     client first name
+'  t_last      client last name
+'  t_addr      client address 
+'  t_addr2     client address line 2
+'  t_city      client city
+'  t_state     client state
+'  t_zip       client zip
+'  t_date      letter date
+'  t_enddt     letter end date
+'  t_enddays   number of days -- can be used to calculate t_enddt (t_date + t_enddays)
+'  t_staff     staff identifier
+'              -- "$oper" to get current unix opererator id || $operstaffid to get current operator staff id
+'  t_position  staff position
+'
+' Dst Mapping
+'  template values are mapped to dst values by setting the supported variables listed above to the desired dst name 
+'     by parmfile or option.
+'  ex; t_first "c.fn"
+'      t_last "c.ln"
+'
+' Date calculations
+'  t_date defaults to $today. override with parmfile or option, ex; option = "t_date`6/28/2013"
+'  t_enddate is not defaulted
+'  if t_enddate is null value script attempts to calculate by (t_date + t_enddays).
+'     if t_enddt and t_enddays are both not present t_enddt = t_date
+'
+' see https://code.google.com/p/nug-r9-pasrr/source/browse/branches/tim/templates/pasrr-denial-letter.uhp
+'  for complete template example.
+
+%version 0.0 6/27/2013
+start PASRRLetter(parmfile, option, client, retcode)
+parmfile    is x
+option      is x
+client      is x
+retcode     is x
+
+'letter template and parts
+t_path[]    is x
+t_first     is x
+t_last      is x
+t_addr      is x
+t_addr2     is x
+t_city      is x
+t_state     is x
+t_zip       is x
+
+t_date      is d
+t_enddt     is d
+t_enddays   is b
+
+t_staff     is x
+t_position  is x
+
+'other options
+ignore_file_err   is x
+
+'private vars
+i           is b
+c-dsts[]    is x
+s-dsts[]    is x
+-val[]      is x
+l-d         is b
+%include inc_sysLibDef
+
+$allowupdate(retcode)
+
+'init defaults
+t_path[1] = "/c0/forms/denial-letter.uhp"
+t_first = "c.fn"
+t_last = "c.ln"
+t_addr = "c.addr1"
+t_addr2 = "c.addr.2"
+t_city = "c.city.desc"
+t_state = "c.state"
+t_zip = "c.zip"
+
+t_date = $today
+t_enddays = 90
+
+t_staff = "$oper"
+'t_position = "s.pos.title"
+
+'load options
+getparm(parmfile)
+getoption(option)
+
+retcode = 0
+
+'load library
+if $loadlib(l-d, "lib_DST") > 0 then retcode = 99 return endif
+
+'look up the client dsts
+i = 0
+c-dsts[++i] = t_first
+c-dsts[++i] = t_last
+c-dsts[++i] = t_addr
+c-dsts[++i] = t_addr2
+c-dsts[++i] = t_city
+c-dsts[++i] = t_state
+c-dsts[++i] = t_zip
+
+l-d:read(client, c-dsts[])
+-val[] = l-d:dst(c-dsts[])
+
+i = 0
+t_first = -val[++i]
+t_last  = -val[++i]
+t_addr  = -val[++i]
+t_addr2 = -val[++i]
+t_city  = -val[++i]
+t_state = -val[++i]
+t_zip   = -val[++i]
+
+'look up the staff dsts
+select $uc(t_staff)
+   case "$OPER"         t_staff = $oper
+   case "$OPERSTAFFID"  t_staff = $operstaffid
+   case other           'hardcoded staff/oper id
+endselect
+
+if t_position dp then
+   i = 0
+   s-dsts[++i] = t_position
+   
+   l-d:read(t_staff, s-dsts[])
+   -val[] = l-d:dst(s-dsts[])
+
+   t_position = -val[i]
+endif
+
+'calc end date
+if t_enddt !dp then
+   t_enddt = t_date + t_enddays
+endif
+
+'call the templates
+if $arrCompress(t_path[]) > 0 then retcode = 98 endif
+
+i = 1
+do while i <= $maxarray(t_path[])
+   if $checkfile(t_path[i]) = 0 then
+      uhp(t_path[i])
+      select $endbutton
+         case "SUBMIT"  i++
+         case "CANCEL"  i--
+         case other     'refresh
+      endselect
+   
+      if i < 1 then 
+         i = $maxarray(t_path[]) + 1
+         retcode = 1 
+      endif
+   else
+      if ignore_file_err != "N" then
+         retcode = 97
+      endif
+      i++
+   endif
+enddo
+
+end PASRRLetter
+
+%include inc_GetParm
+%include inc_GetOption
+%include inc_uhp

@@ -1,0 +1,122 @@
+<$html uhpver='4'>
+<$body submitlabel='next' cancellabel='back'>
+<style>
+   /*body {padding: 5em 0 0 0; height:100%; }*/
+   h2 {text-align: left;}
+   .letter { padding: 5em 0 0 0;}
+   .letterhead {
+      overflow: auto;
+      float: left;
+      border-right: solid 2px #3366CC;
+      margin: -4em 2% 0 0;
+      padding: 2% 2% 0 0;
+      height: 100%}
+   /*.logo {overflow:visible;      margin: -4em 0 0 0;*/
+}
+   .footer { position: relative;
+      margin: 450% 0 0 0;  
+      text-align: right;
+      font: italic 0.7em sans-serif;
+      color:  #3366CC;
+   }
+   .content { margin: -2em 0 0 0 1em;}
+   .address {margin: 3% 0;}
+   .date {margin: 1% 0;}
+   .salutation {margin: 1% 0;}
+   .body {}
+   .body p {margin: 1% 0;}
+   .indent {margin: 0 0 0 4%;}
+   .closing {margin: 3% 0;}
+   .signature {}
+   .ps {margin: 3% 0 0 0;}
+   .ps h1 {margin: 0; 
+      padding: 0; 
+      font: normal 100% !important; 
+      text-align: left !important; 
+      color:black !important;}
+</style>
+<div class='letter'>
+   <div class='letterhead'>
+      <div class='logo'><img src='/cmhcbui/cmhcbuilocal/gcc-logo.jpg'></div>
+      <div class='footer'>
+         <div>123 ROSENBERG, SUITE 6 </div>
+         <div>GALVESTON, TEXAS  77550</div>
+         <div>409.763.2373           </div>
+         <div>FAX 409.763-5538       </div>
+         <div>www.GulfCoastCenter.org</div>
+      </div>
+   </div>
+   <div class='content'>
+      <h2>DENIAL of PASRR Specialized Services</h2>
+      <div class='address'>
+         <div><$literal value='t_first' /> <$literal value='t_last' /> </div>
+         <div><$literal value='t_addr' /> </div>
+         <div><$literal value='t_addr2' /> </div>
+         <div><$literal value='t_city' />, <$literal value='t_state' /> <$literal value='t_zip' /></div>
+      </div>
+      <div class='date'>
+         <$literal value='t_date' />
+      <div>
+      <div class='salutation'>
+         Dear <$literal value='t_first' /> <$literal value='t_last' />,
+      </div>
+      
+      <div class='body'>
+         <p>
+            As required by state rules regarding your request for admission to a nursing facility, 
+            The Gulf Coast Center conducted an evaluation to determine whether you are eligible for specialized services.
+         </p>
+         <p>
+            Based on the evaluation The Gulf Coast Center determined that you are not eligible for specialized services 
+            because you do not have a diagnosis of mental illness, an intellectual disability, or developmental disability.
+         </p>
+         <p>
+            The state rules that require the evaluation and determination are found at 40 Texas Administrative Code 
+            (TAC) Chapter 17.  The rules are 40 TAC §17.102 (for definitions of specialized services, mental illness, 
+            intellectual disability, and developmental disability), 40 TAC §17.201 (for preadmission), and §17.202 
+            (for expedited admission).
+         </p>
+         <p>
+            If you do not agree with this determination you can request a fair hearing before a Health and Human Services 
+            Commission (HHSC) hearing officer.  The hearing is conducted in accordance with HHSC fair hearing rules found 
+            at 1 TAC Chapter 357, subchapter A.
+         </p>
+         <p>
+            If you want to request a fair hearing, you must request it in writing and the Department of Aging and Disability 
+            Services (DADS) must receive your request on or before <$literal value='t_enddt' />.  If DADS does not 
+            receive your request by this date you lose your right to a hearing.
+         </p>
+         <p>
+            You may represent yourself or you may choose an authorized representative such as a relative, friend, 
+            lawyer or other spokesperson to represent you.
+         </p>
+         <p>
+            You can request a fair hearing by completing the enclosed from and mailing it to:
+            <div class='indent'>
+            	<div>Department of Aging and Disability Services</div>
+            	<div>PASRR Section,  ATTN: PASRR Appeals Coordinator</div>
+            	<div>P. O. Box 149030 MC: W 356</div>
+            	<div>Austin, Texas 78714-9030</div>
+            </div>
+         </p>
+         <p>
+         If you have questions about any of the information in this letter, please contact me at: 1-409-763-2373.
+         </p>
+      </div>
+      <div class='closing'>
+         Sincerely,
+      </div>
+      <div class='signature'>
+         <$literal value='t_staff' edittype='DCT``2071' /> <br>
+         The Gulf Coast Center
+      </div>
+      <div class='ps'>
+         <h1>Enclosure</h1>
+         cc: PASRR Appeals Coordinator, PASRR Section, Access and Intake, DADS
+      </div>    
+   </div>
+</div>
+
+<$print>
+<$/body>
+<$/html>

@@ -1,0 +1,35 @@
+start PASRRWrap(parmfile, option, client, retcode)
+parmfile    is x
+option      is x
+client      is x
+retcode     is b
+
+usc_note    is x
+usc_pasrr_review  is x
+
+
+usc_note = "eBASE_notes"
+usc_pasrr_review = "PASRREvent"
+
+getParm(parmfile)
+getOption(option)
+
+if usc_note !dp then return endif   'error msg?
+if usc_pasrr_review !dp then return endif   'error msg?
+   
+if client !dp then
+   "lib_CLIENT":pickClient(client)
+endif
+
+call usc_note(parmfile, option, client, retcode)
+
+'review pasrr notes
+retcode = retcode
+if retcode = 0 then
+   call usc_pasrr_review(parmfile, option, client, retcode)
+endif
+
+end PASRRWrap
+
+%include inc_GetParm
+%include inc_GetOption
