@@ -261,13 +261,13 @@ nbrEvents  = 0       ' Number of events for one client
 evtCreatedCtr = 0    ' Number of events created
 
 ' Load the services codes that are valid -- these should be configured to your orgs specifications
-roll_Sacs[1] = 5330
+roll_Sacs[1] = 6811
 roll_rus[1] = 5440
-bill_Sacs[1] = 5325
+bill_Sacs[1] = 6810
 
-roll_Sacs[2] = 5335
+roll_Sacs[2] = 6813
 roll_rus[2] = 5440
-bill_Sacs[2] = 5326
+bill_Sacs[2] = 6812
 
 ' build edit for Test/Production runMode
 promptIdx = 0
@@ -310,8 +310,8 @@ getParm(parmfile)
 getoption(option)
 
 'create master list of services
-(void)$arraymerge(validservices[], bill_Sacs[], roll_Sacs[])
-(void)$arrPush(validservices[], flag_sac)
+rc = $arraymerge(validservices[], bill_Sacs[], roll_Sacs[])
+rc = $arrPush(validservices[], flag_sac)
 
 'determine the 'service type' based on the configurations:
 if allmatch(flag_sac, roll_sacs[]) = "N" then 
@@ -1119,6 +1119,7 @@ allmatch = "Y"
 
 i = 0
 do while i++ < $maxarray(arr-vals[])
+'   arr-vals[i] = arr-vals[i]
    if arr-vals[i] != value then
       allmatch = "N"
       i = $maxarray(arr-vals[])
