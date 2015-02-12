@@ -1,0 +1,471 @@
+*HIPAA 837 PROFESSIONAL  V5010                                                  
+*This will produce a file according to the HIPAA specifications published       
+*in May 2006.                                                                   
+*                                                                               
+*To use in production, the Receiver ID's will need to be changed to the TMHP pro
+*receiver ID's.                                                                 
+*                                                                               
+*MIS Components Required                                                        
+*                                                                               
+*     Event Rules (A-MRSC05 EVR Group)                                          
+*     Recode Table LOCATE                                                       
+*                                                                               
+* Original Parm - R. Whaite 7/14/2011                                           
+*                                                                               
+* Changes Made                                                                  
+*                                                                               
+*                R. Whaite 7/25/2011 Added HFC Specific API and Submitter ID's  
+*                                    to:                                        
+*                 ISA (CMHC Record 001 Element 6) 146170821 (Submitter ID)      
+*                 GS  (CMHC Record 002 Element 1) 146170821 (Submitter ID)      
+*                 1000A-NM1 (CMHC Record 006 Element 5) 146170821 (Submitter ID)
+*                 2010BB-REF (CMHC Record 258 Element 2) D001019620 API         
+*                                                                               
+*                R. Whaite 7/26/2011 - Added 2010AB NM1, N3 & N4(CMHC Records 21
+*                                     23 & 24) for the Pay to Address to        
+*                                     accomodate sending a PO Box as our        
+*                                     billing address.  PO Box is NOT allowed in
+*                                     the Billing Provider Address (2010AA loop)
+*                                                                               
+******************************** Important ************************************ 
+*Use the Commented Parm Below (*ANSIVER) with script AnsiRunFix. This script  * 
+*Will search this parm for the string below to determine if the parm is for   * 
+*5010 or 4010.  It will then dynamically create the intermediate parm needed  * 
+*to tell the ANSI Program what version (5010 or 4010) to run                  * 
+*                                                                             * 
+*ANSIVER 5010                                                                   
+*                                                                             * 
+******************************************************************************* 
+*                                                                               
+*-------------------------------------------------------------------------------
+*                     HIPAA 837P INFORMATION PARAMETER FILE                     
+*                                                                               
+1...5...10...15...20...25...30...35...40...45...50...55...60...65...70...75...80
+AAA.BBB.CCCCCD..EEEEEEEE..FFFFFFFF..GGGGGGGG..HHHH.I.JJJKKKKKKKK.LLLMMMMMMMM    
+*-------------------------------------------------------------------------------
+TC FIELD  DST*   OUTPUT    INPUT   RECODE TBL DCT  O COMMENTS, REPLACES, FORMATS
+... ... ......  ......... ........  ........  .... . ...........................
+*-------------------------------------------------------------------------------
+*Parameters for Prompts                                                         
+FS 6                                                 Fund Source in Prompt      
+PQOUT N                                              Print Queue Output         
+SEQOUT /c4/EXPORT2/tmhp/ltc/pasrr                                               
+*PQSEQ .837P MRSC_tmhp Send Me                      Print Queue Seq File        
+PQRPT *........837P PASRR Print Me                   Print Queue Report Na      
+CLLIST PASRLIST                                      Client Saved List Prompt   
+*REPORTONLY                                          Report Only Mode Prompt    
+*TESTOUT                                             Create Test File Prompt    
+*-------------------------------------------------------------------------------
+*Parameters for Event Selection                                                 
+RULEGRPFROM A-PASR06                                 Select Events in EVR Range 
+RULEGRPTHRU A-PASR06                                 Select Events in EVR Range 
+NOZEROCOMPFEE                                        Exclude Zero Comp Fee Event
+OPENONLY                                             Include Only Open Events   
+BILLFLAG                                             Exclude Billed Events      
+NOREBILLS                                            Exclude Rebill Events      
+*-------------------------------------------------------------------------------
+*Paramerters for Updating ISN's with billing information.                       
+*                                                                               
+*Need to uncomment the parm below for production                                
+ISNFLAG 3981                                         ADDS LAST DATE BILLED TO T 
+SYSDATEISNFLAG                                       Makes above parm use the   
+*                                                    system date for tbe isn    
+*                                                    bill date                  
+ISNFORCE 03978                                       If this DST is set to "Y"  
+*                                                    Event is forced to bill    
+*                                                    Regardles of bill status   
+CREATEISNBILLREC                                     Creates ISN Bill Record    
+*-------------------------------------------------------------------------------
+*Parameters for File Processing Options                                         
+*EVRUOS 7206                                          Event Rule UOS DST        
+*EVRROUND 7207                                        EVENT RULE ROUND DST      
+*DOOSBRPRTY    3810                                  Fund Source Priority       
+ELIGCLIENTSUBSAME 3833                               Client the Subscriber?-Elig
+*-------------------------------------------------------------------------------
+*This makes the IEH Control footer match the header                             
+IEACNTRLINCZERO                                      Includes Leading Zeros ICH 
+*-------------------------------------------------------------------------------
+*Following 3 lines create the a unique ID for each event billed in the ISN DB   
+*They also submit this same unuque ID to the payer with the Client ID appended  
+*so that Electronic EOB processing can find the correct event.                  
+*ISNUNIQID 3980                                       Unique ID for Orig Events 
+MAXSERV 1                                            Maximum # of Events (Requir
+CLMUNIQID20                                          Creates Unique Claim ID    
+ISNCLMUNIQID 3982                                                               
+*-------------------------------------------------------------------------------
+*ERLINK will probably not be needed unless we need to access Staff DB DST's     
+ERLINK                                               Links to Staff DB from Even
+*-------------------------------------------------------------------------------
+*                                                                               
+*LIMITS THE MAX # OF SUBSCRIBERS (FS) LOOKED AT AND PREVENTS MULTIPLE REFERRING 
+*FROM OCCURING.                                                                 
+*                                                                               
+MAXOSBR 0                                            Maximum # Other Subscribers
+*-------------------------------------------------------------------------------
+*Parameters for Delimiters, Carriage Returns, Line Feeds                        
+DELIMSUP1                                            Omits Extra Delimiters     
+*DELIMSUP2                                           Omit Extra Delimiters but 1
+NOCRLF                                              No Carriage Return/LineFeed 
+REPSEPARATOR |                                       Rep Seperator Change ^ to |
+*Parameter for Formatting Output                                                
+REPSTRA -                                            Remove Dashes              
+REPSTRB .                                            Remove Periods             
+NOMODMOVE                                            Modifiers won't move       
+*-------------------------------------------------------------------------------
+*Parameters for ASR Processing                                                  
+*Don't use any ASR DSTs without also including the DOASR parameter.             
+*DOASR                                                ASR Billing (We will use A
+*                                                                               
+*-------------------------------------------------------------------------------
+*Build Record Section                                                           
+*If you need to reference any DST that's part of a record, it needs to first be 
+*listed in the Build Record Section. For the record numbers, use the first valid
+*record in this file. For the field numbers, use zeros. For the DST numbers,    
+*first list the record header DST, followed by the DSTs in the record that need 
+*to be referenced in the parameter file, then end the record by entering zeros  
+*in the DST area.                                                               
+*                                                                               
+*Build Record 0001 - Eligibility Record                                         
+001 000 00090                                        Eligibility Record Header  
+001 000 03823                                        Payer Priority (P, S, T)   
+001 000 00095                                        Reference ID               
+001 000 07390                                        Insured's Group Name       
+001 000 03801                                        Last/Organization Name     
+001 000 03802                                        First Name                 
+001 000 03803                                        Middle Name                
+001 000 03961                                        Name Suffix                
+001 000 03963                                        ID Code Qualifier          
+001 000 03804                                        Address Information        
+001 000 03805                                        Address Information        
+001 000 03806                                        City                       
+001 000 03807                                        State                      
+001 000 03808                                        Zip Code                   
+001 000 03810                                        Client Relation to Insured 
+001 000 03811                                        Subscriber Birth Date      
+001 000 03812                                        Subscriber Gender          
+001 000 03830                                                                   
+001 000 07390                                        Payer Name Duplicated Above
+001 000 00000                                                                   
+*End of Record Build                                                            
+*                                                                               
+*Build Record 0013 -  Case Address Record                                       
+001 000 00149                                        Patient Address Record     
+001 000 00054                                        Address Information        
+001 000 00055                                        Address Information        
+001 000 00056                                        City                       
+001 000 00057                                        State                      
+001 000 00058                                        Zip Code                   
+001 000 00000                                                                   
+*End of Record Build                                                            
+*                                                                               
+*Build Record 0006 - Diagnosis Record                                           
+001 000 00532                                        Diagnosis Record Header    
+001 000 00072                                        Industry Code              
+001 000 00534                                        Industry Code              
+001 000 00539                                        Industry Code              
+001 000 00540                                        Industry Code              
+001 000 00505                                        Industry Code              
+001 000 00000                                                                   
+*End of Record Build                                                            
+*                                                                               
+*Build Record 860 - Admit/Discharge Record                                      
+001 000 00860                                        Admit/Discharge Record     
+001 000 00861                                        Admit Date                 
+001 000 00862                                        Discharge Date             
+001 000 00000                                                                   
+*End of Record Build                                                            
+*                                                                               
+*-------------------------------------------------------------------------------
+*Record and Field Section                                                       
+*Records 1 thru 10 must be defined with constants.                              
+*                                                                               
+*Interchange Control Header - Required - Header - CMHC record 1 - ISA           
+001 001 00000   00                                   Authorization Info Qual    
+001 002 00000                                        Authorization Info         
+001 003 00000   00                                   Security Info Qualifier    
+001 004 00000                                        Security Info              
+001 005 00000   ZZ                                   Interchange ID Qualifier   
+*                                                                               
+*The Sender ID below will be defined by TMHP once we get our EDI Agreement      
+*Approved                                                                       
+*                                                                               
+001 006 00000   146170821                            Interchange Sender ID      
+*               Provided by TMHP once LTC EDI Agreement is approved             
+001 007 00000   ZZ                                   Interchange ID Qualifier   
+*                                                                               
+*                                                                               
+*The Receiver ID with the T listed below is for testing.  Will need to use the  
+*Receiver ID with the P for production.                                         
+*                                                                               
+*001 008 00000   617591011CMST                        Interchange Receive ID TES
+001 008 00000   617591011CMSP                        Interchange Receive ID PRO 
+*                                                                               
+001 009 00000   0                                    Acknowledgement Requested  
+*Nothing in the 5010 Companion Guide on this, so I assume it is to be left as a 
+001 010 00000   P                                    Usage Indicator            
+********************************************************************************
+*Functional Group Header - Required - Header - CMHC record 2 - GS               
+002 001 00000   146170821                            Application Sender's Code  
+*Change Last Letter to a P for production                                       
+002 002 00000   617591011CMSP                        Application Receiver's Code
+002 003 00000   005010X222A1                         Version/Release IndustryID 
+*                                                                               
+********************************************************************************
+*Transaction Set Header - Required - Header - CMHC record 3 - Program Driven-ST 
+********************************************************************************
+*                                                                               
+*Beginning of Hierarchical Transaction - Required - Header - CMHC record 4 - BHT
+*TMHP Companion Guide does not seem to require BHT03 Reference Identification   
+*as a Batch ID.  If this ends up being needed, we can use the BHTLASTNUM and the
+*BHTAGENCYID parameters to build it  It would go into BHT03 as a program provide
+*identfier driven by the above referenced parameters.                           
+004 001 00000   00                                   Transaction Set Purpose Cod
+004 002 00000   CH                                   Transaction Type Code      
+********************************************************************************
+*                                                                               
+*Transmission Type Identification - Required - Header - CMHC record 5 - REF     
+*                                                                               
+*No Longer Needed in the 5010                                                   
+*005 001 00000   004010X098A1                          Transmission Type Code   
+********************************************************************************
+*                                                                               
+*Submitter Name - Required - Loop 1000A - CMHC record 6 - NM1                   
+006 001 00000   2                                    Entity type Qualifier      
+006 002 00000   Helen Farabee Centers                Last/Organization Name     
+*006 005 00000   127373204                            ID Code (Should this be TP
+*Documentation indicates that this should be our Submitter ID and not the TPI.  
+006 005 00000   146170821                            ID Code (Submitter ID?)    
+********************************************************************************
+*                                                                               
+*Submitter EDI Contact Information - Required - Loop 1000A - CMHC record 8 - PER
+008 001 00000   Lora Leary                           Name                       
+008 002 00000   TE                                   Comm Number Qualifier (Phon
+008 003 00000   9403973140                           Comm Number (Phone Number) 
+008 004 00000   EM                                   Email                      
+008 005 00000   learlyl@helenfarabee.org             Email Address              
+008 006 00000   FX                                   Fax                        
+008 007 00000   9403973150                           Fax Number                 
+********************************************************************************
+*                                                                               
+*Receiver Name - Required - Loop 1000B - CMHC record 9 - NM1                    
+009 001 00000   TMHP                                 Last/Organization Name     
+009 002 00000   617591011CMSP                        ID Code                    
+********************************************************************************
+*                                                                               
+*Billing/Pay to Prov Speciality Info (Loop 2000A), CMHC Record 12 - PRV         
+*                                                                               
+012 002 00000   171M00000X                           MRSC Taxonomy Code         
+********************************************************************************
+*                                                                               
+*Billing Provider Name - Required - Loop 2010AA - CMHC record 14 - NM1          
+014 001 00000   2                                    Entity Type Qualifier      
+014 002 00000   Helen Farabee Centers                Last/Organization Name     
+*Added for using NPI, but not sure if this will be needed here                  
+*DADS has indicated that we will get/use an API.  The implementation guide indic
+*that other proprietary identfiers such as the API are to be reported in the REF
+*Segment of Loop ID-2010BB.  Additionally, the implentation guide indicates that
+*the two fields below are "situational"                                         
+*014 006 00000   XX                                   ID Code Qualifier XX=NPI  
+*014 007 00000   1437379344                           RS=A ID Code (NPI)        
+*014 007 00000   1639297799                           RS=A ID Code (NPI)        
+*                                                                               
+********************************************************************************
+*                                                                               
+*Billing Provider Address - Required - Loop 2010AA - CMHC record 16 - N3        
+*016 001 00000   PO Box 8266                         Address Information        
+*                                                    PO Box not allowed in this 
+*                                                    loop.  Look to 2010AB (Pay 
+*                                                    to Address) loop.          
+016 001 00000   1000 Brook Ave                      Address Information         
+********************************************************************************
+*                                                                               
+*Billing Provider City/State/Zip Code Required - Loop 2010AA-CMHC record 17-N4  
+017 001 00000   WICHITA FALLS                        City                       
+017 002 00000   TX                                   State                      
+*                                **Note**  ZIP + 4 is required with the 5010    
+017 003 00000   763018266                            RS=A   Zip Code            
+********************************************************************************
+*                                                                               
+***NEW*** CMHC ANSI RECORD                                                      
+*Billing Provider Tax ID - Required - Loop 2010AA - CMHC record 250-REF         
+250 001 00000   EI                                   Secondary Ref ID Qual      
+250 002 00000   751241976                            Secondary Ref ID           
+********************************************************************************
+*                                                                               
+*This loop is not needed (Situational) when the information is the same as in   
+*loop 1000A - SUBMITTER PER Segment.                                            
+*Billing Provider Contact Info - Situational - Loop 2010AA-CMHC record 20-PER   
+*020 001 00000   Lora Leary                           Name                      
+*020 002 00000   TE                                   Comm Number Qualifier     
+*020 003 00000   940-397-3140                         Comm Number               
+********************************************************************************
+*                                                                               
+*This loop is only needed if we want the payment to be sent to a PO Box.        
+*Otherwise, all of the necessary information is in loop 2010AA (Billing Provider
+*Pay to Address - Situational - Loop 2010AB-CMHC record 21-NM1                  
+021 001 00000   2                                    Name                       
+*                                                                               
+*Pay to Address - Situational - Loop 2010AB-CMHC record 23-N3                   
+023 001 00000   PO Box 8266                          Address 1                  
+023 002 00000   1000 Brook Ave                       Address 2                  
+*                                                                               
+*Pay to Address - Situational - Loop 2010AB-CMHC record 24-N4                   
+024 001 00000   Wichita Falls                        City                       
+024 002 00000   TX                                   State Abbreviation         
+024 003 00000   763018266                            Zip Code + 4               
+********************************************************************************
+*                                                                               
+*TMHP Website Update indicates that MH2 benefit code will be required beginning 
+*May 9, 2008.  March 2008 TMHP Companion Guide indicates that this data should  
+*be placed in SBR03 Loop 2000B.  This is CMHC Record 027 Field 002 below.       
+*Spoke with TMHP Help Desk to determine which TPI's this should be used with and
+*they listed each of our TPI's and told me that ONLY the MRSC would require this
+*benefit code.  Called on 5/13/2008 at approximately 12:41 PM.                  
+*Help ticket #:  716806495                                                      
+*                                                                               
+*Subscriber Information - Required - Loop 2000B - CMHC record 27 - SBR          
+027 001 03823                                        Payer Responsibility #     
+*Decided to hold off for more clarification from TMHP - R. Whaite 5/14/2008     
+*7/7/2011 Not sure if the benefit code used below will still be required.       
+*I've left comments in parm related to this from 2008 for reference purposes    
+*those comments should be removed if this is not needed.  This field will       
+*initially be commented out of the parm for testing.                            
+*                                                                               
+*IMC Meeting 7/22/11, TMHP and DADS staff indicated that the MH2 would NOT      
+*be needed.                                                                     
+*                                                                               
+*027 002 00000   MH2                                   RS=A  Reference ID       
+*027 003 00000   MEDICAID REHABILITATIVE SERVICES     Insured's Group Name      
+*027 004 01756                                        Insurance Type Code       
+027 005 00000   MC                                   Claim Filing Indicator Code
+********************************************************************************
+*                                                                               
+*Patient Information - Required - Loop 2000B - CMHC record 28 - PAT             
+028 001 00668                                        Date of Death (If Known)   
+*028 003 05006                                        Weight in pounds          
+*028 004 01760                                        Pregnancy Indicator       
+********************************************************************************
+*                                                                               
+*Subscriber Name - Required - Loop 2010BA - CMHC record 29 - NM1                
+029 001 00000   1                                    Entity Type Qualifier      
+029 002 00051                                        Last/Organization Name     
+029 003 00052                                        First Name                 
+029 004 00053                                        Middle Name                
+*029 005 01762                                        Name Suffix               
+029 006 00000   MI                                   ID Code Qualifier          
+029 007 00095                                        RS=A  ID Code              
+********************************************************************************
+*                                                                               
+*Subscriber Address - Required - Loop 2010BA - CMHC record 31 - N3              
+031 001 00054                                        Address Information        
+031 002 00055                                        Address Information        
+********************************************************************************
+*                                                                               
+*Subscriber City/State/Zip Code - Required - Loop 2010BA  - CMHC record 32 - N4 
+032 001 00056                                        City                       
+032 002 00057                                        State                      
+032 003 00058                                        RS=A  Zip Code             
+********************************************************************************
+*                                                                               
+*Subscriber Demographic Information-Situational-Loop 2010BA-CMHC record 33-DMG  
+033 001 00063                                        Subscriber Birth Date      
+033 002 00061                                        Subscriber Gender          
+********************************************************************************
+*                                                                               
+*Subscriber Secondary Identification-Situational-Loop 2010BA-CMHC record 34-REF 
+034 001 00000   SY                                   Reference ID Qualifier     
+034 002 00060                                        RS=A Reference ID          
+********************************************************************************
+*                                                                               
+*Payer Name - Required - Loop 2010BB - CMHC record 36 - NM1                     
+*7/7/11 All fields below are exactly as indicated in the July 1, 2011 TMHP      
+*LTC 837P Companion Guide.                                                      
+036 001 00000   TDHS/TDMHMR                          Payer Name                 
+036 002 00000   PI                                   Payer ID Code Qualifier    
+036 003 00000   324/655                              Payer Primary ID           
+********************************************************************************
+*                                                                               
+*Billing Provider Secondary Identfication - Situational - Loop 2010BB -         
+*CMHC record 258 - REF                                                          
+*7/7/11 All fields below are exactly as indicated in the July 1, 2011 TMHP      
+*LTC 837P Companion Guide.                                                      
+258 001 00000   G2                                   Reference ID Qualifier     
+*Teleconfernce 7/19/11.  TMHP/DADS indicated that API would be provided back to 
+*us by TMHP.  It is based on our contract number provided by DADS with 2 leading
+*zeros.  TMHP indicated that in our billing, we would also need to add the      
+*letter "D" to the front of the API that TMHP provides.                         
+258 002 00000   D001019620                           Reference ID (API)         
+********************************************************************************
+*                                                                               
+*With Medicaid, the patient is always the same as the subscriber, so this       
+*section identifying the patient is not need.  However, it will just be         
+*commented out until we complete testing.                                       
+*Patient Name - Required - Loop 2010C - CMHC record 50 - NM1                    
+*050 001 00051                                        Last/Organization Name    
+*050 002 00052                                        First Name                
+*050 003 00053                                        Middle Name               
+*050 004 01435                                        Name Suffix               
+*050 005 00000   MI                                   ID Code Qualifier         
+*050 006 00095                                        Patient Primary ID #      
+*                                                                               
+*Patient Demographic Information - Required - Loop 2010CA - CMHC record 54 - DMG
+*054 001 00063                                        Patient Birth Date        
+*054 002 00061                                        Gender Code               
+*                                                                               
+*Patient Secondary Identification-Situational-Loop 2010CA - CMHC record 55 - REF
+*055 001 00000   SY                                   Reference ID Qualifier    
+*055 002 00060                                        RS=A Reference ID         
+********************************************************************************
+*                                                                               
+*Claim Information -  Required - Loop 2300 - CMHC record 57 - CLM               
+*057 001 00050                                        Patient Account Number    
+*CLMUNIQID20 parameter should handle the above.                                 
+057 002 00000   53                                   Facility Code Value        
+057 003 00000   1                                    Claim Frequency Type Code  
+057 004 00000   Y                                    Yes/No Condition Code      
+057 005 00000   A                                    Prov Accept Assignment     
+057 006 00000   Y                                    Yes/No Condition Code      
+057 007 00000   Y                                    Release of Information     
+*057 008 00000   B                                    Patient Signature Source  
+********************************************************************************
+*                                                                               
+*Health Care Diagnosis Code - Situational - Loop 2300 - CMHC record 102 - HI    
+102 001 00539                                        RS=B AXIS II Level I       
+*102 002 00072                                        RS=B AXIS I Level I       
+*102 003 00534                                        RS=B AXIS I Level II      
+*102 004 00540                                        RS=B AXIS II Level II     
+********************************************************************************
+*                                                                               
+*Claim Pricing/Repricing Information-Situational-Loop 2300-CMHC record 103 - HCP
+*This segment is only used by repricers.                                        
+*                                                                               
+*7/7/2011 May need to uncomment and point the modifiers to the appropriate place
+*Project code or evr dst.  But will need the HCPCS codes for billing from DADS  
+*first                                                                          
+*                                                                               
+*Professional Service - Required - Loop 2400 - CMHC record 164 - SV1            
+164 001 00000   HC                                   Product/Service ID Qual    
+164 002 03006                                        Product/Service ID with EVR
+*164 003 03007                                        Modifier 1 within EVR     
+*164 004 03007                                        Modifier 2 within EVR     
+*164 005 03007                                        Modifier 3 within EVR     
+164 006 03007                                        Modifier 4 within EVR      
+164 007 00013                                        Monetary Amount (std fee fo
+164 008 00000   UN                                   Unit/Basis for Measurement 
+*                                                                               
+*Let's use a script to get the right PASRR UOS in quarter hour fractions        
+164 009 07100                                        US=ANSIDTTM Recodes the Cl 
+*                                                                               
+*                                                                               
+164 010 00034                       LOCATE           Facility Code Value        
+164 011 00000   1                                    Diagnosis Code Pointer     
+*164 015 00000   N                                    Yes/No Condition Code     
+164 018 00000   0                                    Copay Exempt               
+********************************************************************************
+*                                                                               
+*Service Date - Required - Loop 2400 - CMHC record 174 - DTP                    
+174 001 00002                                        Date Time Period           
+*                                                                               
+*Line Item Control Number - Loop 2400 (Optional)                                
+*195 001  7100                                        Reference ID (ISN Number) 
+195 001  7100                                        US=ANSIDTTM                

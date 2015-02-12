@@ -1,0 +1,73 @@
+'This script is called by the ANSIP progrgram when the Parm file indicates the US=ANSIDTTM in record 195 field 1 (Line Item Control Number).
+'The script is passed the ISN ID (as the ansival argument).  It then verifies the record and field number from the ANSIP program.  It 
+'then does a lookup of the $$isn.tm DST for that ISN register and then optionally, inserts the start time of the event as HHMM (24 hour clock)
+'in front of the ISN ID or simply replaces the ISN ID with the start time of the event in HHMM format (24 hour clock).
+
+start ansidttm(ansival,ansirec,ansifld,ansitest,ansicl,ansicon,ansiprov)
+
+ansival  is x
+ansirec  is x
+ansifld  is x
+ansitest is x
+ansicl   is x
+ansicon  is x
+ansiprov is x
+rc       is b
+$$isn.tm	is t
+newval is x
+
+if $today = 08/02/2013
+   $trace("path.on", "/c4/EXPORT2/trace/ANSIDTTM.TXT")
+endif
+
+if 		ansirec = "195" and ansifld = "001"
+	rc = $dbread(9,ansival, $$isn.tm)
+
+	newval = $format($$isn.tm,"HHMM")
+
+'Use one or the other options below.  Comment out the other one.  Either option is OK since DADS/TMHP will only be reading the
+'First 4 characters of the REF*6R segment to get the start time of the service.  The first option puts the ISN ID immediately after
+'the 4 character time information (HHMM-nnnnnnnnnnn).  The second option just puts the event start time from the ISN DST (HHMM).
+
+	newval = $replace(" ","0",newval) + "-" + ansival      	'This option will put the ISN ID immediately behind the 4 character time
+'	newval = $replace(" ","0",newval)												'This option omits the ISN ID from this field.
+	ansival = newval
+endif
+
+'PASRR Billing as well as LTC IDD TCM Billing.  PASRR Claims are to be claimed with a 1 hour UOS, reporting fractions of an hour rounded to the 
+'nearest quarter hour (.25).  However, IDD TCM Billing is claimed per event so the UOS will always be 1.
+
+if 		ansirec = "164" and ansifld = "009"
+
+sac_iddpasrr	is i
+sac_mipasrr		is i
+$$isn.sac  		is i
+$$isn.rdur 		is t
+rdur       		is i
+rdurn			 		is n
+
+sac_iddpasrr	= 5325
+sac_mipasrr		= 5326
+
+
+	rc = $dbread(9,ansival, $$isn.sac, $$isn.rdur)
+
+	if $$isn.sac = sac_iddpasrr or $$isn.sac = sac_mipasrr
+	  rdurn = ($casti($round($$isn.rdur,15)) / 60)
+	  if rdurn > 6
+	  	rdurn = 6
+	  endif
+	  newval = $castx(rdurn)
+	else
+		newval = "1"
+	endif
+
+ansival = newval
+endif
+
+$allowupdate(ansival)
+$silent(ansival)
+
+end ansidttm 
+
+
