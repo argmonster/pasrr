@@ -1,0 +1,550 @@
+' Script Name: 	PASRR Event Roll Up
+' Author:		M.Lusk
+' Center		STARCARE Lubbock
+' Date:			8/28/2014
+' Rules:		MI and IDD events are handled separately.
+'				A billable client face-to-face contact in each series is necessary for a roll-up to occur.
+'				The first billable note in a series is used for the roll-up's Staff ID, Date, Time, Loc Code, Recip Code, Att Code, etc. 	
+'				If someone rolls up an event prematurely then it has to be undone (outside this script) before the billing dept gets ahold of it.
+'				If there is an event you do not want included in the roll-up, then you must flag it as unwanted.
+'				If someone forgets to flag a billable event as unwanted, then the roll-up has to be undone before billing gets ahold of it.
+start PASRRFinEv()
+ %version 02.01.00 11/01/2014
+ %include inc_ER
+ iClientID          is x
+ c.fn				is x
+ c.ln				is x
+ s.ln				is x
+ s.fn				is x
+ s.email            is x
+'--- Medicaid Reference
+ Medicaid_Num       is x
+ medLoop	        is x    'Medicaid loop
+'--- Event Array
+ estaffid[]			is x
+ eClient[]			is x	
+ eLoc[]	  	        is x
+ eAttend[]	        is x
+ eRecip[]	        is x			
+ eDate[]			is d
+ eTime[]			is t
+ eSer[]				is b
+ eDur[]				is t
+ eClDur[]           is t
+ eRU[]				is b
+ eKey[]				is x    'E.ISN.KEY
+ eKeyX[]			is x	'temporary variable used for converting eKey to true alphanumeric value
+ eBillFlg[]	        is x
+ skip[]				is x	'skip checkbox	
+ RollupYN			is x    'is there an event to be rolled up?  [Y/N]
+ MI_RolledUp[]      is x
+ IDD_RolledUp[]     is x
+ ISNKey				is x	'E.ISN.KEY	
+ MIKey[]			is x    'MI eKey to be updated with Roll-Up flag
+ IDDKey[]			is x	'IDD eKey to be updated with Roll-Up flag
+'--- Index
+ i					is n   	'main index
+ MI_i				is n   	'MI index for events to be flagged as rolled up
+ IDD_i				is n   	'IDD index for events to be flagged as rolled up	
+ k					is n	'index for converting eKeyX[]	
+'---	
+ ColWidth[]	        is x	
+ FromDate			is d	
+ ThruDate			is d	
+'---Accumulators/Formatting	Accumulators  
+ Total_MIBill		is t    'MI billable total at bottom of page that needs to be rolled up
+ Total_MINoBill		is t    'MI non-billable total at bottom of page
+ Total_IDDBill		is t    'IDD billable total at bottom of page that needs to be rolled up
+ Total_IDDNoBill	is t    'IDD non-billable total at bottom of page
+ MITTL2Rollup       is t    'accumulated MI billable total to roll up
+ IDDTTL2Rollup	    is t    'accumulated IDD billable total to roll up		
+ Total_MIRollup		is t    'total for all MI billable events that have already been rolled up
+ Total_IDDRollup	is t	'total for all IDD billable events that have already been rolled up	
+'---1st Contact
+ Contact1[]         is x    '1st contact 
+ Recip1[] 			is x				
+ Att1[] 			is x
+ Loc1[] 			is x
+ Date1[] 			is d
+ Time1[] 			is t
+ Staff1[]			is x
+ RU1[]				is b
+ face2face[]		is x
+'---Events---
+ SVC_IDD_BILL       is b 
+ SVC_IDD_NoBill		is b	'MI and IDD Non-Billable	
+ SVC_IDD_Final		is b	'MI and IDD Final
+
+ SVC_MI_Bill		is b	'MH Billable
+ SVC_MI_NoBill		is b	'MI and IDD Non-Billable
+ SVC_MI_Final		is b	'MI and IDD Final		
+'---	
+ rc					is x
+ continue			is x	continue = "Y"
+ exit_btn			is x    'Exit button
+ new_btn	        is x    'New client button
+ add_btn			is x    'Add PASRR MI/IDD Event button			
+ checkbox           is i
+ event_created      is x
+ email_billstaff[]  is x
+ email_sub          is x
+ email_msg          is x
+ email_cc           is x
+
+ $looplimit = 0	
+'-- Service Codes	
+ SVC_IDD_Bill   = 5330
+ SVC_IDD_NoBill = 5334
+ SVC_IDD_Final  = 5325
+
+ SVC_MI_Bill    = 5335
+ SVC_MI_NoBill  = 5339
+ SVC_MI_Final   = 5326
+
+ select $uc($seg($mscname,1,5))
+  case "HELEN" if $operstaffid = "3242" or     'Ralph Whaite
+                $operstaffid = "3737" or       'Chris Love
+                $operstaffid = "4078" or       'Kayla Rose
+                $operstaffid = "4393" or       'Melissa Krahmer
+                $operstaffid = "2221" or       'Charlie Martin
+                $operstaffid = "1529" or       'Judy Michael
+                $operstaffid = "2225" or       'Rhonda McAffity
+                $operstaffid = "4149" or       'Christi Pierce
+                $operstaffid = "4504"          'Setira McDonald
+                 email_billstaff[1] = "mccaffityr@helenfarabee.org"
+                 email_billstaff[2] = "michaelj@helenfarabee.org"
+                 email_billstaff[3] = "whaiter@helenfarabee.org"
+               else
+                $brmsg("You are not Authorized for this Function", 1, "WC")
+                return
+               endif
+  case "PECAN" if $operstaffid = "3242" or
+               $operstaffid = "3737" or
+               $operstaffid = "001557" or
+               $operstaffid = "001662" or
+               $operstaffid = "001673"  
+                email_billstaff[1] = "whaiter@helenfarabee.org"
+                email_billstaff[2] = "amanda@pecanvalley.org"
+                email_billstaff[3] = "hmorton@pecanvalley.org"
+			   else
+			    $brmsg("You are not Authorized for this Function", 1, "WC")
+                return
+			   endif	
+ endselect     
+ 
+ email_sub = "#PASRR Completed"
+ (void)$dbread(3, $operstaffid, s.email)
+ email_cc = s.email	
+
+'-- Beginning date 			
+ fromDate = "05/01/2013"	
+ thruDate = $today	
+			 	
+ $regid = {"lib_COMMON"}GetClientID()
+ iClientID = $regid		 
+
+NewClient:	        
+ $clear(Medicaid_Num)
+			  	
+Begin:
+'When an event is rolled up this will be flagged as Y.	
+ RollupYN = "N"
+ Contact1[SVC_MI_Bill] = "Y" 
+ Contact1[SVC_IDD_Bill] = "Y"
+ face2face[SVC_MI_Bill] = "N"
+ face2face[SVC_IDD_Bill] = "N"	
+ add_btn = "N"
+ exit_btn = "N"
+ new_btn = "N"	
+	
+ $clear(MITTL2Rollup,IDDTTL2Rollup,Total_MIRollup,Total_IDDRollup,Total_MIBill,Total_MINoBill,Total_IDDBill,Total_IDDNoBill,skip[],MI_RolledUp[],IDD_RolledUp[])	
+ {"lib_UAMEDICAID"}check_medicaid(iClientID,,Medicaid_Num)
+			
+'--- Using old Style Styles 
+ $setstyle(".sb1", "font-family:Arial Narrow", "font-size:9pt", "color:red", "font-weight:bold")
+ $setstyle(".sb4", "font-family:Arial Narrow", "font-size:9pt", "color:darkblue", "font-weight:regular")
+ $setstyle(".sb6", "font-family:Arial Narrow", "font-size:9pt", "color:green", "font-weight:regular")
+ $setstyle(".sb7", "font-family:Arial Narrow", "font-size:9pt", "color:white", "font-weight:regular")	
+ $setstyle(".sb10", "font-family:Arial Narrow", "font-size:10pt", "color:gray", "font-weight:bold")
+ $setstyle(".sb11", "font-family:Arial Narrow", "font-size:14pt", "color:gray", "font-weight:bold")	
+ $setstyle(".sb12", "font-family:Arial Narrow", "font-size:10pt", "color:gray", "font-weight:regular")
+ $setstyle(".sb14", "font-family:Arial Narrow", "font-size:9pt", "color:purple", "font-weight:regular")
+ $setstyle(".sb17", "font-family:Arial Narrow", "font-size:8pt", "color:gray", "font-weight:regular")						
+ $submitopt("Off","")
+ $cancelopt("Off","")
+
+MainArea:	 
+'--- Title area ---
+ $ctag("<div style='position: absolute; border-style: solid; border-width: 1px; width: 820; height: 300px; z-index: 3; left: 10px; top: 5px; id='TitleGroup'>")	
+ $form("Main")			
+ $ctag("<div style='text-align: center; width: 820;'>")
+  $table("Header",,"border='0' width='820'")
+   $row() 
+ 	$col("Center",,"33%") $ctag("&nbsp;")
+	$col("Center",,"34%") $text("PASRR Roll Up","sb11")
+				          $br()$text(" Client: ","sb10")$text(iClientID,"sb10")$text(`$nc(c.fn) + " " + $nc(c.ln)`,"sb10")		
+				          $br()$text(FromDate,"sb10")$text("  thru   ","sb10")$text($today,"sb10")			
+	$col("Right","bottom","33%")$text("Medicaid ID:","sb10")		
+				                if Medicaid_Num dp
+				                 $text(Medicaid_Num,"sb10")
+                                else
+				                 $text("Not on file","sb1")
+				                endif
+  $endtable("Header")	
+ $ctag("</div>")	
+'--- Outer border ---
+ $br()$ctag("<div style='position: absolute; border-style: solid; border-width: 1px; width: 825; height: 460px; z-index: 3; left: 10px; style='text-align: center'  id='OuterBorder'>")	
+'--- PASRR Header ---
+ $ctag("<div style='position: absolute; border-style: solid; border-width: 0px; width: 820; height: 52px; z-index: 3; left: 1px; top: 2px; id='Header'>")		
+  $ctag("&nbsp;")  
+  $text("PASRR Event Status:","sb12") 
+  $ctag("&nbsp;") $ctag("&nbsp;") $ctag("&nbsp;") 
+  $text("Y = Rolled Up Billable Event SVC","sb17") $text(SVC_IDD_Bill,"sb17")$text("/","sb17")$text(SVC_MI_Bill,"sb17")
+  $ctag("&nbsp;") $ctag("&nbsp;") $ctag("&nbsp;") 
+  $text("F = Final Billable Event SVC","sb17") $text(SVC_IDD_Final,"sb17")$text("/","sb17")$text(SVC_MI_Final,"sb17")
+  $br()$table("Header",,"border='1' width='820'")
+        $row(,"bgcolor='Gray'")
+         $col("Center",,"5") $ctag("&nbsp;")	
+         $col("Center",,"10") $text("SKIP","sb1")					  
+         $col("Center",,"60") $text("DATE","sb7") 			
+         $col("Center",,"140") $text("SERVICE","sb7")
+         $col("Center",,"130") $text("STAFF","sb7")
+         $col("Center",,"20") $text("RU","sb7")
+         $col("Center",,"125") $text("LOC","sb7")	
+         $col("Center",,"125") $text("ATTEND","sb7")	
+         $col("Center",,"140") $text("RECIP","sb7")								
+         $col("Center",,"25") $text("DUR","sb7")
+       $endtable("Header")	
+ $ctag("</div>")		
+'--- Put events into array
+  $brmsg("Loading Events.", 1, "C", "PROCESSING")
+  (void)$ertoarray(,iClientID,FromDate,ThruDate,EStaffID[],,,eDate[],eTime[],eClient[],,,eSer[],eDur[],,eClDur[],eRU[],,eLoc[],,,eKey[],,,,,,eAttend[],eRecip[],,,,,,eBillFlg[])	
+  k = 0
+  $clear(eKeyX[])     'temporary variable
+  $brmsg("Converting ERKey to alpha", 1, "C", "PROCESSING")
+  do while k++ < $maxarray(eKey[])
+   eKeyX[k] = $erkeyx(eKey[k])
+  enddo
+  $brmsg("Sorting Events.", 1, "C", "PROCESSING")  
+  (void)$sort(eDate[],"A",eTime[],"A",eSer[],eStaffID[],eDur[],eClDur[],eRU[],eLoc[],eKeyX[],eAttend[],eRecip[],eBillFlg[])		
+  k = 0
+  $clear(eKey[])
+  $brmsg("Converting ERKey numeric.", 1, "C", "PROCESSING")  
+  do while k++ < $maxarray(eKeyX[])
+   eKey[k] = $erkeyn(eKeyX[k])
+  enddo		
+  $brmsgclose()
+  $ctag("<div style='position: absolute; border-style: solid; border-width: 1px; width: 845; height: 334px; overflow:auto; z-index: 3; left: 1px; top: 50px; id='Data'>")	
+' Exclude events other than PASRR codes												
+   $table("Data",,"border='1' width='820'")
+    i = 0
+	checkbox = 0					
+    do while i++ < $maxarray(eDate[])
+     if eSer[i] = SVC_MI_Bill or eSer[i] = SVC_MI_NoBill or eSer[i] = SVC_MI_Final or eSer[i] = SVC_IDD_Bill or eSer[i] = SVC_IDD_NoBill or eSer[i] = SVC_IDD_Final 									
+ '---Display detail on screen-------------------																																																						
+      select eSer[i]
+       case SVC_MI_Bill $style("sb4")
+       case SVC_IDD_Bill $style("sb4")	   
+       case SVC_MI_NoBill $style("sb6")
+       case SVC_IDD_NoBill $style("sb6")	   
+       case SVC_MI_Final $style("sb14")						
+       case SVC_IDD_Final $style("sb14")							   
+      endSelect																				
+      (void)$dbread(3,EStaffID[i],s.fn,s.ln)	
+	  s.fn = $nc(s.fn)
+	  s.ln = $nc(s.ln)
+	  s.fn = s.fn + " " + s.ln
+      if $mod(i,2) = 0
+       $row(,"bgcolor='white'")
+	  else
+       $row(,"bgcolor='whitesmoke'")
+	  endif			 								
+      $col("right",,"5") if (eSer[i] = SVC_MI_Bill) and (eBillFlg[i] = "Y") or (eSer[i] = SVC_IDD_Bill) and (eBillFlg[i] = "Y")
+                                  $text("Y")
+                                 elseif eSer[i] = SVC_MI_Final or eSer[i] = SVC_IDD_Final
+                                  $text("F")
+                                 else
+                                  $ctag("&nbsp;")
+                                 endif 	
+      $col("right",,"10")if (eSer[i] = SVC_MI_Bill or eSer[i] = SVC_IDD_Bill) and eBillFlg[i] != "Y"	  
+                          $checkbox(skip[i],"","Y")
+						  checkbox++
+                         else
+                          $ctag ("<hr size='1' width='20' color=#FFFFFF>")    'place holder to control column width when blank
+                         endif																					
+      $col("center",,"50") $text(eDate[i]) $text(eTime[i])							
+      $col(,,"150") $br()$text(`$SAM(eSer[i],"D") $text(eSer[i])`) 
+      $col(,,"150") $text(EStaffID[i])$br()$text($ncs(s.fn))										
+      $col(,,"25")$text(eRU[i])			
+      $col(,,"125")$text(eLoc[i])
+                         $br()$text($ncs($dct(13,eLoc[i])))
+      $col(,,"125")$text(eAttend[i])
+                         $br()$text(`$ncs($dct(12,eAttend[i]))`)
+      $col(,,"150")$text(eRecip[i])
+                         $br()$text($ncs($dct(11,eRecip[i])))																																											
+      $col("right",,"30")$text(`$format(eDur[i],"HHH:MM")`)
+                                 if (eSer[i] = SVC_IDD_Final or eSer[i] = SVC_MI_Final) and (eClDur[i] dp)
+                                  $br()$text(`"(" + $format(eClDur[i],"HHH:MM") + ")"`)
+                                 endif																						
+'---totals at bottom of page, which bucket does it fall into?-----------
+					             select eSer[i]
+					              case SVC_MI_Bill Total_MIBill = Total_MIBill + eDur[i]
+                                  case SVC_MI_NoBill Total_MINoBill = Total_MINoBill + eDur[i]
+					              case SVC_MI_Final Total_MIRollup = Total_MIRollup + eDur[i]
+					              case SVC_IDD_Bill Total_IDDBill = Total_IDDBill + eDur[i]
+                                  case SVC_IDD_NoBill Total_IDDNoBill = Total_IDDNoBill + eDur[i]
+					              case SVC_IDD_Final Total_IDDRollup = Total_IDDRollup + eDur[i]
+					             endselect					
+'---------------------------------------------------------------									
+     endif
+    enddo				
+   $endtable("Data")				
+  $ctag("</div>")				
+'--- Display Balances at bottom of page---
+  $ctag("<div style='position: absolute; border-style: solid; border-width: 1px; width: 820; height: 35px; z-index: 3; left: 1px; top: 388px; id='Events'>")			
+   $table("PASRRBal",,"border='0' width='820'")																	
+    $row(,"bgcolor='#FFFFFF'")
+     $col(,,"380")if Total_MIBill => 6:00 or Total_IDDBill => 6:00
+					     $text("The maximum billable hours is 6.","sb1")
+				        endif	
+     $col("right",,"200")$text("MI Billable Total:","sb4")							 
+     $col("right",,"20")$text(`$format(Total_MIBill,"HHH:MM")`,"sb4")
+     $col("right",,"200")$text("IDD Billable Total:  ","sb4") 
+     $col("right",,"20")$text(`$format(Total_IDDBill,"HHH:MM")`,"sb4")							
+    $row(,"align='right' bgcolor='#FFFFFF'")							
+     $col("right")$ctag ("<hr size='1' width='200' color=#FFFFFF>")
+     $col("right")$text("MI Non-Billable Total:  ","sb6") 
+     $col("right")$text(`$format(Total_MINoBill,"HHH:MM")`,"sb6")	
+     $col("right")$text("IDD Non-Billable Total:  ","sb6") 
+     $col("right")$text($format(Total_IDDNoBill,"HHH:MM"),"sb6")					
+    $row(,"bgcolor='#FFFFFF'")							
+     $col()If (Total_MIBill != Total_MIRollup) or (Total_IDDBill != Total_IDDRollup)
+					     $text("Billable Events and Finalized Events not in balance.","sb1")
+				        else
+ 				         $ctag("&nbsp;")
+				        endif							
+     $col("right")$text("MI Billable Rolled Up:  ","sb14") 
+     $col("right")$text(`$format(Total_MIRollup,"HHH:MM")`,"sb14")	
+     $col("right")$text("IDD Billable Rolled Up:  ","sb14") 
+     $col("right")$text(`$format(Total_IDDRollup,"HHH:MM")`,"sb14")										
+   $endtable("PASRRBal")	
+  $ctag("</div>")
+'--- end of Balance section ---		
+ $ctag("</div>")   'outer border
+'--- begin button section ---
+ $ctag("<div style='position: absolute; border-style: solid; border-width: 0px; width: 440; height: 50px; z-index: 3; left: 10px; top: 560px; id='Buttons'>") 
+  $table("AddEvent",,"border='0' width='820'")
+   $row()
+    $col("right",,"45%")if checkbox > 0
+	                     $submit(add_btn, "Roll Up Event")
+						endif 
+    $col("center",,"10%")$submit(exit_btn,"Exit")
+    $col(,,"45%")$submit(new_btn,"New Client")
+  $endtable("AddEvent") 	
+ $ctag("</div>")  'buttons
+'--- end button section ---
+ $sendform("Main")
+'--- Start Form Loop (Cycle Until Selection) ---
+ do while continue = "Y"
+'Exit button
+  if exit_btn = "Y"
+   return	
+  endif	
+'Add Event button
+  if add_btn = "Y"
+   continue = "Y"
+'prior to AddEvent		
+   goto AddEvent
+  endif
+'Add MI Event button
+  if new_btn = "Y"
+   continue = "Y"
+   $regid =	{"lib_COMMON"}GetClientID()
+   iClientID = $regid		
+   goto NewClient		
+  endif				
+ enddo
+'-----------------------------
+'--- Add PASRR Final Event
+AddEvent:
+'--- Put events into array
+  $brmsg("Loading Events.", 1, "C", "PROCESSING")
+ (void)$ertoarray(,iClientID,FromDate,ThruDate,EStaffID[],,,eDate[],eTime[],eClient[],,,eSer[],eDur[],,eClDur[],eRU[],,eLoc[],,,eKey[],,,,,,eAttend[],eRecip[],,,,,,eBillFlg[])	
+  k = 0
+  $clear(eKeyX[])     'temporary variable
+  $brmsg("Converting ERKey to alpha", 1, "2", "PROCESSING")
+  do while k++ < $maxarray(eKey[])
+   eKeyX[k] = $erkeyx(eKey[k])
+  enddo
+  $brmsg("Sorting Events.", 1, "C", "PROCESSING")
+  (void)$sort(eDate[],"A",eTime[],"A",eSer[],eStaffID[],eDur[],eClDur[],eRU[],eLoc[],eKeyX[],eAttend[],eRecip[],eBillFlg[])		
+  k = 0
+  $clear(eKey[])
+  $brmsg("Converting ERKey to numeric", 1, "C", "PROCESSING")  
+  do while k++ < $maxarray(eKeyX[])
+   eKey[k] = $erkeyn(eKeyX[k])
+  enddo										
+  i = 0					
+  MI_i = 0
+  IDD_i = 0
+  event_created = "N"
+  $brmsg("Processing Events", 1, "C", "PROCESSING")    
+  do while i++ < $maxarray(eDate[])		
+'Exclude events other than PASRR codes												
+   if eSer[i] = SVC_MI_Bill or eSer[i] = SVC_MI_NoBill or eSer[i] = SVC_MI_Final or eSer[i] = SVC_IDD_Bill or eSer[i] = SVC_IDD_NoBill or eSer[i] = SVC_IDD_Final 									
+'---does this need to be rolled up?-----------------------						
+'No bill flag & billable SVC
+'billable, not already rolled up, not skipped						    		  																
+    if (eBillFlg[i] != "Y") and (eSer[i] = SVC_MI_Bill) and (skip[i] !dp)
+'flag this event as rolled up			
+     MI_i++
+     MIKey[MI_i] = eKey[i] 
+     RollupYN = "Y" 
+	 MI_RolledUp[MI_i] = "Y"
+     MITTL2Rollup = MITTL2Rollup + eDur[i]										
+'is this the first billable event in this series?
+     if Contact1[SVC_MI_Bill] = "Y"
+      Contact1[SVC_MI_Bill] = "N"
+      Recip1[SVC_MI_Bill]   = eRecip[i]				
+      Att1[SVC_MI_Bill]     = eAttend[i]
+      Loc1[SVC_MI_Bill]     = eLoc[i]
+      Date1[SVC_MI_Bill]    = eDate[i]
+      Time1[SVC_MI_Bill]    = eTime[i]
+      Staff1[SVC_MI_Bill]   = EStaffID[i]
+      RU1[SVC_MI_Bill]      = eRU[i]
+     endif
+'if we don't already have a client face-to-face MI event						
+     if (face2face[SVC_MI_Bill] = "N")
+      if  (eRecip[i] = "1") or 'client only
+      (eRecip[i] = "4") or     'client and collaterals
+      (eRecip[i] = "5") or     'client and family members
+      (eRecip[i] = "6")        'client, family, and collaterals
+       face2face[SVC_MI_Bill] = "Y"
+      endif
+     endif																				
+    elseif (eBillFlg[i] != "Y") and (eSer[i] = SVC_IDD_Bill) and (skip[i] !dp)
+'flag this event as rolled up			
+     IDD_i++
+     IDDKey[IDD_i] = eKey[i] 
+     RollupYN = "Y" 				
+	 IDD_RolledUp[IDD_i] = "Y"	 
+     IDDTTL2Rollup = IDDTTL2Rollup + eDur[i]	
+'is this the first billable IDD event in this series?					
+     if Contact1[SVC_IDD_Bill] = "Y"
+      Contact1[SVC_IDD_Bill] = "N"
+      Recip1[SVC_IDD_Bill] = eRecip[i]				
+      Att1[SVC_IDD_Bill] = eAttend[i]
+      Loc1[SVC_IDD_Bill] = eLoc[i]
+      Date1[SVC_IDD_Bill] = eDate[i]
+      Time1[SVC_IDD_Bill] = eTime[i]
+      Staff1[SVC_IDD_Bill] = EStaffID[i]
+      RU1[SVC_IDD_Bill] = eRU[i]											
+     endif
+'if we don't already have a client face-to-face IDD event
+     if (face2face[SVC_IDD_Bill] = "N")
+      if  (eRecip[i] = "1") or 'client only
+      (eRecip[i] = "4") or     'client and collaterals
+      (eRecip[i] = "5") or     'client and family members
+      (eRecip[i] = "6")        'client, family, and collaterals
+       face2face[SVC_IDD_Bill] = "Y"
+      endif
+     endif																															
+    endif
+   endif	
+  enddo			
+'-- from 1st contact for MI -------------------------
+  if (Recip1[SVC_MI_Bill] dp) and (face2face[SVC_MI_Bill] = "Y") and (MITTL2Rollup dp)
+   e.case.no = iClientID
+   e.ser     = SVC_MI_Final		
+   e.recip   = Recip1[SVC_MI_Bill] 				
+   e.att     = Att1[SVC_MI_Bill] 
+   e.loc     = Loc1[SVC_MI_Bill] 
+   e.date    = Date1[SVC_MI_Bill] 
+   e.start   = Time1[SVC_MI_Bill] 
+   e.staff   = Staff1[SVC_MI_Bill] 
+   e.ru      = RU1[SVC_MI_Bill]			
+'accumulated MI total to be rolled up	     
+   e.dur     = MITTL2Rollup
+   if e.dur > 6:00   '6:00 cap
+    e.dur = 6:00   
+   endif	
+   e.cl.dur = e.dur
+   e.cl.dur = $round(e.cl.dur,15)			
+   rc = $insertevent(e.case.no,e.staff,e.date,e.ru,e.start,e.loc,e.dur,e.cl.dur,e.ser,e.recip,e.att)		
+   if rc != 0
+    $brmsg(`"MI insert error:" + " RC= " + rc + ",Date= " + e.Date + ",SVC= " + e.Ser`, 1, "WC")
+   else
+    rc = $isncreate("T",,,$erkey,e.case.no, e.staff, e.date, e.start, e.ser, "Y")	
+    event_created = "Y"
+   endif
+'-- flag MI events that were rolled up into final event
+   MI_i = 0
+   do while MI_i++ < $maxarray(MIKey[])
+    $erkey = MIKey[MI_i]
+    if (skip[MI_i] !dp) and MI_RolledUp[MI_i] = "Y"
+     $erlock()
+     rc = $readevent(e.case.no,e.staff,e.date,e.ru,e.start,e.ser,e.bill.flg)
+     if rc != 0
+      $brmsg(`"MI read error:" + " RC= " + rc + ",Date= " + e.date + ",SVC= " + e.ser`, 1, "WC")
+     endif									 	
+     e.bill.flg = "Y"				
+     rc = $updateeventxx(e.case.no,e.staff,e.date,e.ru,e.start,e.ser,e.bill.flg)
+     if rc != 0
+      $brmsg(`"MI update error:" + " RC= " + rc + ",Date= " + e.date + ",SVC= " + e.ser`, 1, "WC")
+     endif
+    endif				
+   enddo																		
+  endif
+' -----------------------------------------------		
+'-- from 1st contact for IDD ---------------------
+  if (Recip1[SVC_IDD_Bill] dp) and (face2face[SVC_IDD_Bill] = "Y") and (IDDTTL2Rollup dp)
+   e.case.no = iClientID
+   e.ser     = SVC_IDD_Final	
+   e.recip   = Recip1[SVC_IDD_Bill] 				
+   e.att     = Att1[SVC_IDD_Bill] 
+   e.loc     = Loc1[SVC_IDD_Bill] 
+   e.date    = Date1[SVC_IDD_Bill] 
+   e.start   = Time1[SVC_IDD_Bill] 
+   e.staff   = Staff1[SVC_IDD_Bill] 
+   e.ru      = RU1[SVC_IDD_Bill]			
+'accumulated IDD total to be rolled up	  		
+   e.dur     = IDDTTL2Rollup
+   e.bill.flg = "Y"
+   if e.dur > 6:00   '6:00 cap
+    e.dur = 6:00
+   endif
+   e.cl.dur = e.dur
+   e.cl.dur = $round(e.cl.dur,15)			
+   rc = $insertevent(e.case.no,e.staff,e.date,e.ru,e.start,e.loc,e.dur,e.cl.dur,e.ser,e.recip,e.att)		
+   if rc != 0
+    $brmsg(`"IDD insert error:" + " RC= " + rc + ",Date= " + e.date + ",SVC= " + e.ser`, 1, "WC")
+   else
+    rc = $isncreate("T",,,$erkey,e.case.no, e.staff, e.date, e.start, e.ser, "Y")	
+	event_created = "Y"
+   endif
+'-- flag IDD events that were rolled up into final event
+   IDD_i = 0
+   do while IDD_i++ < $maxarray(IDDKey[])
+    $erkey = IDDKey[IDD_i]			
+    if skip[IDD_i] !dp and IDD_RolledUp[IDD_i] = "Y"
+     $erlock()
+     rc = $readevent(e.case.no,e.staff,e.date,e.ru,e.start,e.ser,e.bill.flg)
+     if rc != 0
+      $brmsg(`"IDD read error:" + " RC= " + rc + ",Date= " + e.date + ",SVC= " + e.ser`, 1, "WC")
+     endif									 	
+     e.bill.flg = "Y"				
+     rc = $updateeventxx(e.case.no,e.staff,e.date,e.ru,e.start,e.ser,e.bill.flg)	
+     if rc != 0
+      $brmsg(`"IDD update error:" + " RC= " + rc + ",Date= " + e.date + ",SVC= " + e.ser`, 1, "WC")
+     endif
+    endif				
+   enddo		 		
+  endif
+  if event_created = "Y"
+   email_msg = "PAsRR Assessment completed for " + iClientID + " on " + $today
+   (void)$email(email_billstaff[], email_sub, email_msg, email_cc)
+  endif
+  $brmsgclose()
+'-------------------------------------------------------				
+ goto Begin	'refresh screen with new display							
+end PASRRFinEv
