@@ -1,35 +1,66 @@
 start PASRRWrap(parmfile, option, client, retcode)
+
+if $operstaffid = "3737" or $operstaffid = "3242"
+	$trace("path.on","/c4/EXPORT2/trace/trace3242")
+endif
+
+
 parmfile    is x
 option      is x
 client      is x
 retcode     is b
+string 			is x
 
 usc_note    is x
 usc_pasrr_review  is x
 
 
-usc_note = "eBASE_notes"
+'usc_note = "eBASE_notes"
 usc_pasrr_review = "PASRREvent"
+usc_pasrr_review = "PASRRFINEV"
 
 getParm(parmfile)
 getOption(option)
 
-if usc_note !dp then return endif   'error msg?
+'if usc_note !dp then return endif   'error msg?
 if usc_pasrr_review !dp then return endif   'error msg?
    
+client = $regid
 if client !dp then
-   "lib_CLIENT":pickClient(client)
+'   "lib_CLIENT":pickClient(client)
+return
 endif
 
-call usc_note(parmfile, option, client, retcode)
+'call usc_note(parmfile, option, client, retcode)
 
 'review pasrr notes
 retcode = retcode
-if retcode = 0 then
+'if retcode = 0 then
+if $operstaffid = "3242" or	'Ralph Whaite
+	 $operstaffid = "3737" or	'Chris Love
+	 $operstaffid = "3688" or	'Valerie Mandela
+	 $operstaffid = "4393" or	'Melissa Krahmer
+	 $operstaffid = "2221" or	'Charlie Martin
+	 $operstaffid = "2212" or	'Lora Leary
+	 $operstaffid = "2225" or	'Rhonda McAffity
+	 $operstaffid = "4149" or		'Christi Pierce
+	 $operstaffid = "4504"		'Setira McDonald
+
    call usc_pasrr_review(parmfile, option, client, retcode)
+
+else
+
+   string = "You are not Authorized for this Function"
+   $brmsg(string, 1, "WC")
+
+
+	return
 endif
 
 end PASRRWrap
 
 %include inc_GetParm
-%include inc_GetOption
+%include inc_GetOption 
+
+
+'HF11121934
