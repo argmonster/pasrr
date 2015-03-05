@@ -9,6 +9,10 @@ string 			is x
 'option vars
 stafftotrace[] is x
 tracepath      is x
+useGlobalId       is x
+useIdPicker       is x
+IdPickerLib       is x
+
 usc_note    is x
 usc_pasrr_review  is x
 
@@ -33,10 +37,20 @@ endif
 'if usc_note !dp then return endif   'error msg?
 if usc_pasrr_review !dp then return endif   'error msg?
    
-client = $regid
+'use the options to decide how to get the client id
+if useGlobalId = "Y" and useIdPicker != "Y" then 
+   client = $regid
+endif
+
+if useIdPicker = "Y" and IdPickerLib dp and client !dp then
+   IdPickerLib:pickClient(client)
+endif
+
+'panic if we still don't have a client
 if client !dp then
-'   "lib_CLIENT":pickClient(client)
-return
+   string = "The System Cannot Tell What Client to Use"
+   $brmsg(string, 1, "WC")
+   return
 endif
 
 'call usc_note(parmfile, option, client, retcode)
