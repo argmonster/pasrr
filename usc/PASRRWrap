@@ -1,16 +1,14 @@
 start PASRRWrap(parmfile, option, client, retcode)
 
-if $operstaffid = "3737" or $operstaffid = "3242"
-	$trace("path.on","/c4/EXPORT2/trace/trace3242")
-endif
-
-
 parmfile    is x
 option      is x
 client      is x
 retcode     is b
 string 			is x
 
+'option vars
+stafftotrace[] is x
+tracepath      is x
 usc_note    is x
 usc_pasrr_review  is x
 
@@ -19,8 +17,18 @@ usc_pasrr_review  is x
 usc_pasrr_review = "PASRREvent"
 usc_pasrr_review = "PASRRFINEV"
 
+'default the trace staff
+stafftotrace[1] = "3737"
+stafftotrace[2] = "3242"
+
+tracepath = "/c4/EXPORT2/trace/trace3242"
+
 getParm(parmfile)
 getOption(option)
+
+if $find($operstaffid, stafftotrace[], 1, "F" then
+	$trace("path.on",tracepath)
+endif
 
 'if usc_note !dp then return endif   'error msg?
 if usc_pasrr_review !dp then return endif   'error msg?
