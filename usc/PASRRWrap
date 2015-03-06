@@ -13,6 +13,9 @@ useGlobalId       is x
 useIdPicker       is x
 IdPickerLib       is x
 callNoteScript    is x
+callReviewScript  is x
+staffNeedAuth     is x
+staffwithAuth[]   is x
 
 usc_note    is x
 usc_pasrr_review  is x
@@ -29,6 +32,19 @@ stafftotrace[2] = "3242"
 tracepath = "/c4/EXPORT2/trace/trace3242"
 
 callNoteScript = "N"
+
+callReviewScript = "Y"
+staffNeedAuth = "Y"
+
+staffwithAuth[1] = "3242"
+staffwithAuth[2] = "3737"
+staffwithAuth[3] = "3688"
+staffwithAuth[4] = "4393"
+staffwithAuth[5] = "2221"
+staffwithAuth[6] = "2212"
+staffwithAuth[7] = "2225"
+staffwithAuth[8] = "4149"
+staffwithAuth[9] = "4504"
 
 getParm(parmfile)
 getOption(option)
@@ -68,25 +84,18 @@ if retcode != 0 then
 endif
 
 'review pasrr notes
-if $operstaffid = "3242" or	'Ralph Whaite
-	 $operstaffid = "3737" or	'Chris Love
-	 $operstaffid = "3688" or	'Valerie Mandela
-	 $operstaffid = "4393" or	'Melissa Krahmer
-	 $operstaffid = "2221" or	'Charlie Martin
-	 $operstaffid = "2212" or	'Lora Leary
-	 $operstaffid = "2225" or	'Rhonda McAffity
-	 $operstaffid = "4149" or		'Christi Pierce
-	 $operstaffid = "4504"		'Setira McDonald
-
-   call usc_pasrr_review(parmfile, option, client, retcode)
-
-else
-
-   string = "You are not Authorized for this Function"
-   $brmsg(string, 1, "WC")
-
-
-	return
+if callReviewScript = "Y" then 
+   'let configuration determine access to review script
+   if staffNeedAuth = "Y" then
+      if $find($operstaffid, staffwithAuth[], 1, "F") > 0 then
+         call usc_pasrr_review(parmfile, option, client, retcode)
+      else
+         string = "You are not Authorized for this Function"
+         $brmsg(string, 1, "WC")
+      endif
+   else
+      call usc_pasrr_review(parmfile, option, client, retcode)
+   endif
 endif
 
 end PASRRWrap
