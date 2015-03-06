@@ -10,7 +10,36 @@
 '				If someone forgets to flag a billable event as unwanted, then the roll-up has to be undone before billing gets ahold of it.
 start PASRRFinEv()
  %version 02.01.00 11/01/2014
- %include inc_ER
+ '%include inc_ER
+ 'e.key       is x
+ e.staff     is x
+ e.case.no   is x
+ e.date      is d
+ e.start     is t
+ e.ser       is b
+ e.desc      is x
+ e.ru        is b
+ e.dur       is t
+ e.cl.dur    is t
+ e.loc       is x
+ e.lof       is x
+ e.recip     is x
+ e.att       is x
+ e.no.rec    is b
+ e.bill.flg  is x
+ e.post.flg  is x
+ e.bill.st   is x
+ e.usr.f1    is x
+ e.usr.f2    is x
+ e.usr.f3    is x
+ e.usr.n1    is n
+ e.proj      is b
+ e.fs        is b
+ e.rev       is n
+ e.std.fee   is n
+ e.fee.code  is x
+ e.comp.fee  is n
+
  iClientID          is x
  c.fn				is x
  c.ln				is x
@@ -93,13 +122,13 @@ start PASRRFinEv()
 
  $looplimit = 0	
 '-- Service Codes	
- SVC_IDD_Bill   = 5330
- SVC_IDD_NoBill = 5334
- SVC_IDD_Final  = 5325
+ SVC_IDD_Bill   = 6812
+ SVC_IDD_NoBill = 6812
+ SVC_IDD_Final  = 6813
 
- SVC_MI_Bill    = 5335
- SVC_MI_NoBill  = 5339
- SVC_MI_Final   = 5326
+ SVC_MI_Bill    = 6811
+ SVC_MI_NoBill  = 6811
+ SVC_MI_Final   = 6810
 
  select $uc($seg($mscname,1,5))
   case "HELEN" if $operstaffid = "3242" or     'Ralph Whaite
@@ -140,8 +169,10 @@ start PASRRFinEv()
  fromDate = "05/01/2013"	
  thruDate = $today	
 			 	
- $regid = {"lib_COMMON"}GetClientID()
- iClientID = $regid		 
+ '$regid = {"lib_COMMON"}GetClientID()
+ "lib_CLIENT":pickClient(iClientID)
+ $regid = iClientID
+ 'iClientID = $regid		 
 
 NewClient:	        
  $clear(Medicaid_Num)
