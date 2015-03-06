@@ -49,7 +49,7 @@ staffwithAuth[9] = "4504"
 getParm(parmfile)
 getOption(option)
 
-if $find($operstaffid, stafftotrace[], 1, "F" then
+if $find($operstaffid, stafftotrace[], 1, "F") > 0 then
 	$trace("path.on",tracepath)
 endif
 
