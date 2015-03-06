@@ -56,13 +56,18 @@ if client !dp then
    return
 endif
 
+retcode = 0
 if callNoteScript = "Y" then
    call usc_note(parmfile, option, client, retcode)
 endif
 
+'if the notes where called and aborted by the user, or 
+' exited in error then we don't want to call the review script
+if retcode != 0 then
+   return
+endif
+
 'review pasrr notes
-retcode = retcode
-'if retcode = 0 then
 if $operstaffid = "3242" or	'Ralph Whaite
 	 $operstaffid = "3737" or	'Chris Love
 	 $operstaffid = "3688" or	'Valerie Mandela
