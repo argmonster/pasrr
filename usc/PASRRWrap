@@ -12,6 +12,7 @@ tracepath      is x
 useGlobalId       is x
 useIdPicker       is x
 IdPickerLib       is x
+callNoteScript    is x
 
 usc_note    is x
 usc_pasrr_review  is x
@@ -26,6 +27,8 @@ stafftotrace[1] = "3737"
 stafftotrace[2] = "3242"
 
 tracepath = "/c4/EXPORT2/trace/trace3242"
+
+callNoteScript = "N"
 
 getParm(parmfile)
 getOption(option)
@@ -53,7 +56,9 @@ if client !dp then
    return
 endif
 
-'call usc_note(parmfile, option, client, retcode)
+if callNoteScript = "Y" then
+   call usc_note(parmfile, option, client, retcode)
+endif
 
 'review pasrr notes
 retcode = retcode
