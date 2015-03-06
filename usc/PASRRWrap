@@ -49,12 +49,12 @@ staffwithAuth[9] = "4504"
 getParm(parmfile)
 getOption(option)
 
-if $find($operstaffid, stafftotrace[], 1, "F") > 0 then
+if $find($operstaffid, stafftotrace[], 1, "F") > 0  then
 	$trace("path.on",tracepath)
 endif
 
-'if usc_note !dp then return endif   'error msg?
-if usc_pasrr_review !dp then return endif   'error msg?
+if callNoteScript = "Y" and usc_note !dp then return endif   'error msg?
+if callReviewScript = "Y" and usc_pasrr_review !dp then return endif   'error msg?
    
 'use the options to decide how to get the client id
 if useGlobalId = "Y" and useIdPicker != "Y" then 
