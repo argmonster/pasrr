@@ -21,30 +21,13 @@ usc_note          is x
 usc_pasrr_review  is x
 
 
-'usc_note = "eBASE_notes"
-usc_pasrr_review = "PASRREvent"
+usc_note = "eBASE_notes"
+'usc_pasrr_review = "PASRREvent"
 usc_pasrr_review = "PASRRFINEV"
 
-'default the trace staff
-stafftotrace[1] = "3737"
-stafftotrace[2] = "3242"
-
-tracepath = "/c4/EXPORT2/trace/trace3242"
-
 callNoteScript = "N"
-
 callReviewScript = "Y"
 staffNeedAuth = "Y"
-
-staffwithAuth[1] = "3242"
-staffwithAuth[2] = "3737"
-staffwithAuth[3] = "3688"
-staffwithAuth[4] = "4393"
-staffwithAuth[5] = "2221"
-staffwithAuth[6] = "2212"
-staffwithAuth[7] = "2225"
-staffwithAuth[8] = "4149"
-staffwithAuth[9] = "4504"
 
 getParm(parmfile)
 getOption(option)
