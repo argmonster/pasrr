@@ -1,14 +1,14 @@
 start PASRRWrap(parmfile, option, client, retcode)
 
-parmfile    is x
-option      is x
-client      is x
-retcode     is b
-string 			is x
+parmfile          is x
+option            is x
+client            is x
+retcode           is b
+string            is x
 
 'option vars
-stafftotrace[] is x
-tracepath      is x
+stafftotrace[]    is x
+tracepath         is x
 useGlobalId       is x
 useIdPicker       is x
 IdPickerLib       is x
@@ -17,7 +17,7 @@ callReviewScript  is x
 staffNeedAuth     is x
 staffwithAuth[]   is x
 
-usc_note    is x
+usc_note          is x
 usc_pasrr_review  is x
 
 
@@ -102,6 +102,3 @@ end PASRRWrap
 
 %include inc_GetParm
 %include inc_GetOption 
-
-
-'HF11121934
