@@ -125,6 +125,11 @@ start PASRRFinEv(parmfile, option, client, retcode)
  email_msg          is x
  email_cc           is x
 
+ 'email options
+ email_sub_test      is x
+ prod_sysname        is x
+ cc_staff            is x
+
  $looplimit = 0	
 '-- Service Codes	
  SVC_IDD_Bill   = 6812
@@ -135,40 +140,11 @@ start PASRRFinEv(parmfile, option, client, retcode)
  SVC_MI_NoBill  = 6811
  SVC_MI_Final   = 6810
 
- select $uc($seg($mscname,1,5))
-  case "HELEN" if $operstaffid = "3242" or     'Ralph Whaite
-                $operstaffid = "3737" or       'Chris Love
-                $operstaffid = "4078" or       'Kayla Rose
-                $operstaffid = "4393" or       'Melissa Krahmer
-                $operstaffid = "2221" or       'Charlie Martin
-                $operstaffid = "1529" or       'Judy Michael
-                $operstaffid = "2225" or       'Rhonda McAffity
-                $operstaffid = "4149" or       'Christi Pierce
-                $operstaffid = "4504"          'Setira McDonald
-                 email_billstaff[1] = "mccaffityr@helenfarabee.org"
-                 email_billstaff[2] = "michaelj@helenfarabee.org"
-                 email_billstaff[3] = "whaiter@helenfarabee.org"
-               else
-                $brmsg("You are not Authorized for this Function", 1, "WC")
-                return
-               endif
-  case "PECAN" if $operstaffid = "3242" or
-               $operstaffid = "3737" or
-               $operstaffid = "001557" or
-               $operstaffid = "001662" or
-               $operstaffid = "001673"  
-                email_billstaff[1] = "whaiter@helenfarabee.org"
-                email_billstaff[2] = "amanda@pecanvalley.org"
-                email_billstaff[3] = "hmorton@pecanvalley.org"
-			   else
-			    $brmsg("You are not Authorized for this Function", 1, "WC")
-                return
-			   endif	
- endselect     
- 
  email_sub = "#PASRR Completed"
- (void)$dbread(3, $operstaffid, s.email)
- email_cc = s.email	
+ email_sub_test = " FOR TESTING ONLY"
+
+ prod_sysname = "/c0/MIS"
+ cc_staff = "Y"
 
 '-- Beginning date 			
  fromDate = "05/01/2013"	
@@ -181,6 +157,15 @@ start PASRRFinEv(parmfile, option, client, retcode)
 
  getparm(parmfile)
  getoption(option)
+
+ if $sysname != prod_sysname then
+    email_sub += email_sub_test
+ endif
+
+ if cc_staff then
+   (void)$dbread(3, $operstaffid, s.email)
+   email_cc = s.email	
+ endif
 
 NewClient:	        
  $clear(Medicaid_Num)
