@@ -177,34 +177,37 @@ if cc_staff  = "Y" then
 endif
 
 NewClient:
-$clear(Medicaid_Num)
+   $clear(Medicaid_Num)
 
 Begin:
-'When an event is rolled up this will be flagged as Y.
-RollupYN = "N"
-Contact1[SVC_MI_Bill] = "Y"
-Contact1[SVC_IDD_Bill] = "Y"
-face2face[SVC_MI_Bill] = "N"
-face2face[SVC_IDD_Bill] = "N"
-add_btn = "N"
-exit_btn = "N"
-new_btn = "N"
+   'When an event is rolled up this will be flagged as Y.
+   RollupYN = "N"
+   Contact1[SVC_MI_Bill] = "Y"
+   Contact1[SVC_IDD_Bill] = "Y"
+   face2face[SVC_MI_Bill] = "N"
+   face2face[SVC_IDD_Bill] = "N"
+   add_btn = "N"
+   exit_btn = "N"
+   new_btn = "N"
+   
+   $clear(MITTL2Rollup,IDDTTL2Rollup,Total_MIRollup,Total_IDDRollup,
+      Total_MIBill,Total_MINoBill,Total_IDDBill,Total_IDDNoBill,
+      skip[],MI_RolledUp[],IDD_RolledUp[])
 
-$clear(MITTL2Rollup,IDDTTL2Rollup,Total_MIRollup,Total_IDDRollup,Total_MIBill,Total_MINoBill,Total_IDDBill,Total_IDDNoBill,skip[],MI_RolledUp[],IDD_RolledUp[])
-{"lib_UAMEDICAID"}check_medicaid(iClientID,,Medicaid_Num)
-
-'--- Using old Style Styles
-$setstyle(".sb1", "font-family:Arial Narrow", "font-size:9pt", "color:red", "font-weight:bold")
-$setstyle(".sb4", "font-family:Arial Narrow", "font-size:9pt", "color:darkblue", "font-weight:regular")
-$setstyle(".sb6", "font-family:Arial Narrow", "font-size:9pt", "color:green", "font-weight:regular")
-$setstyle(".sb7", "font-family:Arial Narrow", "font-size:9pt", "color:white", "font-weight:regular")
-$setstyle(".sb10", "font-family:Arial Narrow", "font-size:10pt", "color:gray", "font-weight:bold")
-$setstyle(".sb11", "font-family:Arial Narrow", "font-size:14pt", "color:gray", "font-weight:bold")
-$setstyle(".sb12", "font-family:Arial Narrow", "font-size:10pt", "color:gray", "font-weight:regular")
-$setstyle(".sb14", "font-family:Arial Narrow", "font-size:9pt", "color:purple", "font-weight:regular")
-$setstyle(".sb17", "font-family:Arial Narrow", "font-size:8pt", "color:gray", "font-weight:regular")
-$submitopt("Off","")
-$cancelopt("Off","")
+   {"lib_UAMEDICAID"}check_medicaid(iClientID,,Medicaid_Num)
+   
+   '--- Using old Style Styles
+   $setstyle(".sb1", "font-family:Arial Narrow", "font-size:9pt", "color:red", "font-weight:bold")
+   $setstyle(".sb4", "font-family:Arial Narrow", "font-size:9pt", "color:darkblue", "font-weight:regular")
+   $setstyle(".sb6", "font-family:Arial Narrow", "font-size:9pt", "color:green", "font-weight:regular")
+   $setstyle(".sb7", "font-family:Arial Narrow", "font-size:9pt", "color:white", "font-weight:regular")
+   $setstyle(".sb10", "font-family:Arial Narrow", "font-size:10pt", "color:gray", "font-weight:bold")
+   $setstyle(".sb11", "font-family:Arial Narrow", "font-size:14pt", "color:gray", "font-weight:bold")
+   $setstyle(".sb12", "font-family:Arial Narrow", "font-size:10pt", "color:gray", "font-weight:regular")
+   $setstyle(".sb14", "font-family:Arial Narrow", "font-size:9pt", "color:purple", "font-weight:regular")
+   $setstyle(".sb17", "font-family:Arial Narrow", "font-size:8pt", "color:gray", "font-weight:regular")
+   $submitopt("Off","")
+   $cancelopt("Off","")
 
 MainArea:
    '--- Title area ---
