@@ -135,14 +135,6 @@ clientpick_lib       is x
 
 $looplimit = 0
 '-- Service Codes
-SVC_IDD_Bill   = 6812
-SVC_IDD_NoBill = 6812
-SVC_IDD_Final  = 6813
-
-SVC_MI_Bill    = 6811
-SVC_MI_NoBill  = 6811
-SVC_MI_Final   = 6810
-
 email_sub = "#PASRR Completed"
 email_sub_test = " FOR TESTING ONLY"
 
@@ -463,6 +455,7 @@ MainArea:
       'Add MI Event button
       if new_btn = "Y"
          continue = "Y"
+         $clear(iClientID,$regid)
          gosub GetClient
          goto NewClient
       endif
@@ -688,8 +681,12 @@ GetClient:
       case "lib_COMMON": 
          iClientID = clientpick_lib:GetClientID()
       case "lib_CLIENT":
-         clientpick_lib:pickClient(iClientID)
+         i = clientpick_lib:pickClient(iClientID)
    endselect
+   'exit the script if the user cancels
+   if i > 0 or iClientID !dp then
+      return
+   endif
    'set the global id
    $regid = iClientID
 goback
