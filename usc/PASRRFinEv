@@ -8,8 +8,13 @@
 '				If someone rolls up an event prematurely then it has to be undone (outside this script) before the billing dept gets ahold of it.
 '				If there is an event you do not want included in the roll-up, then you must flag it as unwanted.
 '				If someone forgets to flag a billable event as unwanted, then the roll-up has to be undone before billing gets ahold of it.
-start PASRRFinEv()
+start PASRRFinEv(parmfile, option, client, retcode)
  %version 02.01.00 11/01/2014
+ parmfile   is x
+ option     is x
+ client     is x
+ retcode    is b
+
  '%include inc_ER
  'e.key       is x
  e.staff     is x
@@ -173,6 +178,9 @@ start PASRRFinEv()
  "lib_CLIENT":pickClient(iClientID)
  $regid = iClientID
  'iClientID = $regid		 
+
+ getparm(parmfile)
+ getoption(option)
 
 NewClient:	        
  $clear(Medicaid_Num)
@@ -579,3 +587,6 @@ AddEvent:
 '-------------------------------------------------------				
  goto Begin	'refresh screen with new display							
 end PASRRFinEv
+
+%include inc_GetParm
+%include inc_GetOption
