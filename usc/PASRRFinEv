@@ -130,6 +130,9 @@ email_sub_test      is x
 prod_sysname        is x
 cc_staff            is x
 
+'client picker options
+clientpick_lib       is x
+
 $looplimit = 0
 '-- Service Codes
 SVC_IDD_Bill   = 6812
@@ -146,17 +149,23 @@ email_sub_test = " FOR TESTING ONLY"
 prod_sysname = "/c0/MIS"
 cc_staff = "Y"
 
+clientpick_lib = "lib_COMMON"
+
 '-- Beginning date
 fromDate = "05/01/2013"
 thruDate = $today
 
-'$regid = {"lib_COMMON"}GetClientID()
-"lib_CLIENT":pickClient(iClientID)
-$regid = iClientID
-'iClientID = $regid
-
 getparm(parmfile)
 getoption(option)
+
+select clientpick_lib
+   case "lib_COMMON": 
+      iClientID = clientpick_lib:GetClientID()
+   case "lib_CLIENT":
+      clientpick_lib:pickClient(iClientID)
+endselect
+'set the global id
+$regid = iClientID
 
 if $sysname != prod_sysname then
    email_sub += email_sub_test
