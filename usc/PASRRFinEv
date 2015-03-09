@@ -158,14 +158,7 @@ thruDate = $today
 getparm(parmfile)
 getoption(option)
 
-select clientpick_lib
-   case "lib_COMMON": 
-      iClientID = clientpick_lib:GetClientID()
-   case "lib_CLIENT":
-      clientpick_lib:pickClient(iClientID)
-endselect
-'set the global id
-$regid = iClientID
+gosub GetClient
 
 if $sysname != prod_sysname then
    email_sub += email_sub_test
@@ -470,8 +463,7 @@ MainArea:
       'Add MI Event button
       if new_btn = "Y"
          continue = "Y"
-         $regid =   {"lib_COMMON"}GetClientID()
-         iClientID = $regid
+         gosub GetClient
          goto NewClient
       endif
    enddo
@@ -690,6 +682,17 @@ $brmsgclose()
 '-------------------------------------------------------
 
 goto Begin   'refresh screen with new display
+
+GetClient:
+   select clientpick_lib
+      case "lib_COMMON": 
+         iClientID = clientpick_lib:GetClientID()
+      case "lib_CLIENT":
+         clientpick_lib:pickClient(iClientID)
+   endselect
+   'set the global id
+   $regid = iClientID
+goback
 
 end PASRRFinEv
 
