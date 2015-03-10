@@ -81,6 +81,7 @@ i               is n      'main index
 MI_i            is n      'MI index for events to be flagged as rolled up
 IDD_i            is n      'IDD index for events to be flagged as rolled up
 k               is n   'index for converting eKeyX[]
+temp                 is x     'temp string
 '---
 ColWidth[]           is x
 FromDate         is d
@@ -132,6 +133,10 @@ cc_staff            is x
 
 'client picker options
 clientpick_lib       is x
+
+'let a seperate script do the roll up
+usc_addevent         is x
+usc_option           is x
 
 $looplimit = 0
 '-- Service Codes
@@ -449,7 +454,26 @@ MainArea:
       if add_btn = "Y"
          continue = "Y"
          'prior to AddEvent
-         goto AddEvent
+         if usc_addevent dp then
+            $brmsg("Rolling Up Events.", 1, "C", "PROCESSING")
+            temp = usc_option 
+            if temp dp then
+               temp += ";"
+            endif
+            'build skip event options to pass to script
+            i = 0
+            do while i++ < $maxarray(eKey[])
+               if skip[i] = "Y" then
+                  temp += "er_to_skip-" + i + "`" + `$erkeyx(eKey[i])` + ";"
+               endif
+            enddo
+
+            call usc_addevent (parmfile, temp, iClientId, retcode)
+            $brmsgclose()
+            goto Begin   'refresh screen with new display
+         else 
+            goto AddEvent
+         endif
       endif
 
       'Add MI Event button
