@@ -198,6 +198,7 @@ reportNbr            is binary   'Report handle
 hdr[]                is alpha    'Report header variable
 printString          is alpha    'Output Line
 
+er_to_skip[]         is alpha    'list of er keys to skip processing
 'Current Event Arrays
 estaff[]             is alpha    'event staff
 edesc[]              is alpha    'event description
@@ -216,12 +217,14 @@ erecip[]             is alpha    'event recipient code
 ebillFlag[]          is alpha    'event billing flag
 ecompFee[]           is numeric  'event computed fee
 ekey[]               is alpha    'event key
+eskip[]              is alpha    'Y|!Y skip this event
 
 numclients           is binary   'total number of clients
 nbrevents            is binary   'Number of Events for a Client
 nbrclients           is numeric  'Number of Clients Read
 evtCreatedCtr        is numeric  'Number of Events Created
 foundEvent           is binary   'Flag for found a event
+skipEvent            is binary   'counter for skipped events
 
 eventloop            is binary   'Counter for Event Loop
 
@@ -251,6 +254,8 @@ serviceIndex          is binary
 serviceType           is alpha
 
 allowNoFlags         is alpha
+skip_billed          is alpha
+skip_rolled          is alpha
 
 'variable initializations
 clientDb = 2
@@ -296,7 +301,7 @@ f2f_recip = "1,4,5,6"
 f2f_loc = "1,2,3,4,5,6,7,9"
 
 enddate = $today
-startdate = $today - 180
+startdate = $today - 365 '180
 
 'rounding config
 roundTime = 15
@@ -419,8 +424,8 @@ if skipReport != "Y" then
    endif
    hdr[2] = "Time: ^TIME^^C^" + $format(startDate, endDate, "MM/DD/YY-MM/DD/YY")       ' Header Line 2
    hdr[3] = ""                               ' Header Blank Line
-   hdr[4] = "Client    Staff    Date    Time  Ser  SDur  CDur   RU   Loc Computed Fee FS  ATT  RC  Proj BFlg      ER-Key"
-   hdr[5] = "*-------* *----* *------* *----* *--* *---* *----* *--* *-* *----------* *-* *-* *--* *--* *--* *-------------------*"
+   hdr[4] = "S Client    Staff    Date    Time  Ser  SDur  CDur   RU   Loc Computed Fee FS  ATT  RC  Proj BFlg      ER-Key"
+   hdr[5] = "- *-------* *----* *------* *----* *--* *---* *----* *--* *-* *----------* *-* *-* *--* *--* *--* *-------------------*"
    
    'open report - 60 lines per page
    reportNbr = $reportavail()
@@ -524,10 +529,27 @@ do while (++nbrclients <= numclients)
          rc = 0
          do while rc++ < $maxarray(ekey[])
             ekey[rc] = $erkeyx(ekey[rc])
+            if $find(ekey[rc], er_to_skip[], 1, "F") > 0 then
+               eskip[rc] = "Y"
+            endif 
+            'exclude previously billed items
+            'needed for multiple episodes of pasrr
+            if skip_billed = "Y" and ebillFlag[rc] = "Y" then
+               $clear(edate[rc],estart[rc],eclient[rc],eduration[rc],ekey[rc],eser[rc],eclient-duration[rc],estaff[rc],
+                            eru[rc],eproj[rc],elocation[rc],efs[rc],eatt[rc],erecip[rc],ecompFee[rc],ebillFlag[rc],
+                            edesc[rc],eskip[rc])
+            endif
+            'exclude perviously created billable event
+            'needed for multiple episodes of pasrr
+            if skip_rolled = "Y" and $find(eser[rc], bill_sacs[], 1, "F") > 0 then
+               $clear(edate[rc],estart[rc],eclient[rc],eduration[rc],ekey[rc],eser[rc],eclient-duration[rc],estaff[rc],
+                            eru[rc],eproj[rc],elocation[rc],efs[rc],eatt[rc],erecip[rc],ecompFee[rc],ebillFlag[rc],
+                            edesc[rc],eskip[rc])
+            endif
          enddo
          
          (void)$sort(edate[],"D",estart[],"D",eclient[],eduration[],"D",ekey[],eser[],eclient-duration[],estaff[],
-                            eru[],eproj[],elocation[],efs[],eatt[],erecip[],ecompFee[],ebillFlag[],edesc[])
+                            eru[],eproj[],elocation[],efs[],eatt[],erecip[],ecompFee[],ebillFlag[],edesc[],eskip[])
 
          rc = 0
          do while rc++ < $maxarray(ekey[])
@@ -548,6 +570,7 @@ do while (++nbrclients <= numclients)
          
          
          foundEvent = 0
+         skipEvent = 0
           
          'Remove non-valid service codes from the arrays
          eventloop = 0
@@ -560,7 +583,7 @@ do while (++nbrclients <= numclients)
                WriteEvents(reportNbr, clientIds[nbrclients], estaff[eventloop], edesc[eventloop],edate[eventloop], estart[eventloop],
                                   eser[eventloop],eduration[eventloop],eclient-duration[eventloop],eru[eventloop],eproj[eventloop],
                                   elocation[eventloop],efs[eventloop],eatt[eventloop],erecip[eventloop],ebillflag[eventloop],
-                                  ecompFee[eventloop],$erkeyx(ekey[eventloop]), skipReport)
+                                  ecompFee[eventloop],$erkeyx(ekey[eventloop]), skipReport, eskip[eventloop])
 
                serviceIndex = getIndex(ServiceType, eser[eventloop], eru[eventloop])
                                   
@@ -570,88 +593,93 @@ do while (++nbrclients <= numclients)
                   billErKey[`roll_sacs[rc]`] = $erkeyx(ekey[eventloop],)
 
                else  ' Must be one of the Flag or rollup services
-                  
-                  ' Save the event Key
-                  erKeyIndex = $maxarray(markErKey[serviceIndex])
-                  
-                  markErKey[serviceIndex, ++erkeyIndex] = $erkeyx(ekey[eventloop])
-                  markErDate[serviceIndex, erKeyIndex] = edate[eventloop]
-                  markErF2F[serviceIndex, erKeyIndex] = isF2F(eduration[eventloop], eclient-duration[eventloop], 
-                                                eatt[eventloop], erecip[eventloop], elocation[eventloop],
-                                                f2f_att, f2f_recip, f2f_loc)
-                  
-                  rc = f2fIndex[serviceIndex]
-                  if  markErF2F[serviceIndex, erKeyIndex] = "Y" 
-                  and (markErDate[serviceIndex, erKeyIndex] < markErDate[serviceIndex, rc] 
-                       or rc !dp) then
-                     f2fIndex[serviceIndex] = erKeyIndex
-                     
-                     if bill-ser[serviceIndex] !dp then
-                        bill-ser[serviceIndex] = bill_sacs[`$find(eser[eventloop], roll_sacs[], 1, "F")`]
-                     endif
-                     
-                     if markErDate[serviceIndex, erKeyIndex] < pe-date[serviceIndex] or pe-date[serviceIndex] !dp then 
-                        pe-date[serviceIndex] = markErDate[serviceIndex, erKeyIndex]
-                     endif
-                  endif
 
-                  ' Is it a start/stop flag service
-                  if  (eser[eventloop] = flag_sac
-                       and eru[eventloop] = flag_ru
-                       and eduration[eventloop] = flag_dur
-                       and eclient-duration[eventloop] = flag_client_dur
-                       and erecip[eventloop] = flag_recip
-                       and eatt[eventloop] = flag_att
-                       and elocation[eventloop] = flag_loc) then
+                  if eskip[eventloop] = "Y" then
+                     skipEvent++
+                  else
+                  
+                     ' Save the event Key
+                     erKeyIndex = $maxarray(markErKey[serviceIndex])
                      
-                     ' Is it the start or stop key
-                     if allowNoFlags != "Y" then
-                        if endErKey !DP then
-                           endErKey = $erkeyx(ekey[eventloop],)
-                           endErDate = edate[eventloop] - MaxPEDays
-                        else
-                           startErKey = $erkeyx(ekey[eventloop],)
-                           'quit looping if we have the start and stop keys
-                           eventloop = nbrevents
+                     markErKey[serviceIndex, ++erkeyIndex] = $erkeyx(ekey[eventloop])
+                     markErDate[serviceIndex, erKeyIndex] = edate[eventloop]
+                     markErF2F[serviceIndex, erKeyIndex] = isF2F(eduration[eventloop], eclient-duration[eventloop], 
+                                                   eatt[eventloop], erecip[eventloop], elocation[eventloop],
+                                                   f2f_att, f2f_recip, f2f_loc)
+                     
+                     rc = f2fIndex[serviceIndex]
+                     if  markErF2F[serviceIndex, erKeyIndex] = "Y" 
+                     and (markErDate[serviceIndex, erKeyIndex] < markErDate[serviceIndex, rc] 
+                          or rc !dp) then
+                        f2fIndex[serviceIndex] = erKeyIndex
+                        
+                        if bill-ser[serviceIndex] !dp then
+                           bill-ser[serviceIndex] = bill_sacs[`$find(eser[eventloop], roll_sacs[], 1, "F")`]
+                        endif
+                        
+                        if markErDate[serviceIndex, erKeyIndex] < pe-date[serviceIndex] or pe-date[serviceIndex] !dp then 
+                           pe-date[serviceIndex] = markErDate[serviceIndex, erKeyIndex]
                         endif
                      endif
-                      
-                  ' Not one of the start/stop services
-                  else
-                     ' Is it before the start or stop key
-                     if (endErKey DP or allowNoFlags = "Y" ) then
-                        'check for date limit
-                        if endErDate dp and edate[eventloop] < endErDate then
-                           if skipReport != "Y" then
-                              (void) $print(reportNbr, "ERROR: Unable to find starting service marker")
+
+                     ' Is it a start/stop flag service
+                     if  (eser[eventloop] = flag_sac
+                          and eru[eventloop] = flag_ru
+                          and eduration[eventloop] = flag_dur
+                          and eclient-duration[eventloop] = flag_client_dur
+                          and erecip[eventloop] = flag_recip
+                          and eatt[eventloop] = flag_att
+                          and elocation[eventloop] = flag_loc) then
+                        
+                        ' Is it the start or stop key
+                        if allowNoFlags != "Y" then
+                           if endErKey !DP then
+                              endErKey = $erkeyx(ekey[eventloop],)
+                              endErDate = edate[eventloop] - MaxPEDays
+                           else
+                              startErKey = $erkeyx(ekey[eventloop],)
+                              'quit looping if we have the start and stop keys
+                              eventloop = nbrevents
                            endif
+                        endif
+                         
+                     ' Not one of the start/stop services
+                     else
+                        ' Is it before the start or stop key
+                        if (endErKey DP or allowNoFlags = "Y" ) then
+                           'check for date limit
+                           if endErDate dp and edate[eventloop] < endErDate then
+                              if skipReport != "Y" then
+                                 (void) $print(reportNbr, "ERROR: Unable to find starting service marker")
+                              endif
    
-                           ' Reset the flags  
-                           reset-counters(billErKey[], startErKey, endErKey, markErKey[], endErDate, erkeyIndex,
-                              billedStaffTime[], billedStaffTime[], unbilledStfTime[], unbilledCltTime[], f2fIndex[])              
-                        else
-                           
-                           ' Must be a service to roll-up
-                           if serviceIndex > 0 then
+                              ' Reset the flags  
+                              reset-counters(billErKey[], startErKey, endErKey, markErKey[], endErDate, erkeyIndex,
+                                 billedStaffTime[], billedStaffTime[], unbilledStfTime[], unbilledCltTime[], f2fIndex[])              
+                           else
                               
-                              if (ebillflag[eventloop] = "Y") then
-                                  billedStaffTime[serviceIndex]  += eduration[eventloop]
-                                  billedClientTime[serviceIndex] += eclient-duration[eventloop]
-                              else
-                                  unbilledStfTime[serviceIndex] += eduration[eventloop]
-                                  unbilledCltTime[serviceIndex] += eclient-duration[eventloop]
-                                  
-'                                  ' Save the event Key
-'                                  markErKey[++erkeyIndex] = $erkeyx(ekey[eventloop])
+                              ' Must be a service to roll-up
+                              if serviceIndex > 0 then
+                                 
+                                 if (ebillflag[eventloop] = "Y") then
+                                     billedStaffTime[serviceIndex]  += eduration[eventloop]
+                                     billedClientTime[serviceIndex] += eclient-duration[eventloop]
+                                 else
+                                     unbilledStfTime[serviceIndex] += eduration[eventloop]
+                                     unbilledCltTime[serviceIndex] += eclient-duration[eventloop]
+                                     
+'                                     ' Save the event Key
+'                                     markErKey[++erkeyIndex] = $erkeyx(ekey[eventloop])
+                                 endif
                               endif
                            endif
-                        endif
-                     else
-                        if skipReport != "Y" then
-                           (void) $print(reportNbr, "ERROR: Service outside of start/end markers")
-                        endif
-                     endif   ' End of have endErKey
-                  endif   ' End of not start/stop service
+                        else
+                           if skipReport != "Y" then
+                              (void) $print(reportNbr, "ERROR: Service outside of start/end markers")
+                           endif
+                        endif   ' End of have endErKey
+                     endif   ' End of not start/stop service
+                  endif ' end of non-skiped event
                endif   ' End of Billable Service code
          endif   ' End of Valid Service
       enddo 'end loop through events
@@ -1004,7 +1032,7 @@ end markEventsBilled
 
 'This is the main routine to print out the event information on a report
 function WriteEvents(reportNbr,clientID,newStaff,newDesc,newDate,newStart,newSer,newStfDur,newClntDur,newRu,newProj,
-                        newLocation,newFs,newAtt,newRecip,newBillFlag,newCompFee, newerkey, skip) is null
+                        newLocation,newFs,newAtt,newRecip,newBillFlag,newCompFee, newerkey, skip, er_skipped) is null
 
    reportNbr    is      binary  'Report Handle
    clientID     is      alpha   'event Client ID
@@ -1025,6 +1053,7 @@ function WriteEvents(reportNbr,clientID,newStaff,newDesc,newDate,newStart,newSer
    newCompFee   is      numeric  'event computed fee
    newerkey     is      alpha   'event erkey
    skip         is      alpha 
+   er_skipped    is      alpha    'the event is marked be be skipped for processing
    
    if skip = "Y" then return endif
 
@@ -1032,8 +1061,8 @@ function WriteEvents(reportNbr,clientID,newStaff,newDesc,newDate,newStart,newSer
    PrintString is    alpha   'Output Concatenation String
    fmt           is      alpha
 
-   fmt =    "L~~~~~~~~ L~~~~~ MM/DD/YY  HH:MM ZZZZ HH:MM HH:MM  ZZZZ  ~~~ Z,ZZ9.99   ZZZ   ~   ~  ZZZZ   ~   L~~~~~~~~~~~~~~~~~~~~" 
-   PrintString = $format(clientID,newStaff,newDate,newStart,newSer,newStfDur,newClntDur,newRu,newLocation,
+   fmt =    "~ L~~~~~~~~ L~~~~~ MM/DD/YY  HH:MM ZZZZ HH:MM HH:MM  ZZZZ  ~~~ Z,ZZ9.99   ZZZ   ~   ~  ZZZZ   ~   L~~~~~~~~~~~~~~~~~~~~" 
+   PrintString = $format(er_skipped, clientID,newStaff,newDate,newStart,newSer,newStfDur,newClntDur,newRu,newLocation,
                             newCompFee,newFs,newAtt,newRecip,newProj,newBillFlag,newerkey,fmt)
    (void)$print(reportNbr,PrintString,"1")
   
