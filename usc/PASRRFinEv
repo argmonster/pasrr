@@ -469,6 +469,7 @@ MainArea:
             enddo
 
             call usc_addevent (parmfile, temp, iClientId, retcode)
+            gosub EmailStaff
             $brmsgclose()
             goto Begin   'refresh screen with new display
          else 
@@ -691,8 +692,7 @@ if (Recip1[SVC_IDD_Bill] dp) and (face2face[SVC_IDD_Bill] = "Y") and (IDDTTL2Rol
    enddo
 endif
 if event_created = "Y"
-   email_msg = "PAsRR Assessment completed for " + iClientID + " on " + $today
-   (void)$email(email_billstaff[], email_sub, email_msg, email_cc)
+   gosub EmailStaff
 endif
 
 $brmsgclose()
@@ -701,18 +701,29 @@ $brmsgclose()
 goto Begin   'refresh screen with new display
 
 GetClient:
-   select clientpick_lib
-      case "lib_COMMON": 
-         iClientID = clientpick_lib:GetClientID()
-      case "lib_CLIENT":
-         i = clientpick_lib:pickClient(iClientID)
-   endselect
+   i = 0
+   if client dp then    'use the client passed in
+      iClientID = client
+      $clear(client)
+   else
+      select clientpick_lib
+         case "lib_COMMON": 
+            iClientID = clientpick_lib:GetClientID()
+         case "lib_CLIENT":
+            i = clientpick_lib:pickClient(iClientID)
+      endselect
+   endif
    'exit the script if the user cancels
    if i > 0 or iClientID !dp then
       return
    endif
    'set the global id
    $regid = iClientID
+goback
+
+EmailStaff:
+   email_msg = "PAsRR Assessment completed for " + iClientID + " on " + $today
+   (void)$email(email_billstaff[], email_sub, email_msg, email_cc)
 goback
 
 end PASRRFinEv
