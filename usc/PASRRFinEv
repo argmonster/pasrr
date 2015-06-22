@@ -8,8 +8,13 @@
 '            If someone rolls up an event prematurely then it has to be undone (outside this script) before the billing dept gets ahold of it.
 '            If there is an event you do not want included in the roll-up, then you must flag it as unwanted.
 '            If someone forgets to flag a billable event as unwanted, then the roll-up has to be undone before billing gets ahold of it.
+'
+%define d_PASRR_CBA "R0NF"
+%define d_PASRR_CBA_NR "R0NR"
+
 start PASRRFinEv(parmfile, option, client, retcode)
-%version 02.01.00 11/01/2014
+%version 02.02.00 06/18/15 TxACE
+
 parmfile   is x
 option     is x
 client     is x
@@ -152,6 +157,17 @@ clientpick_lib = "lib_COMMON"
 fromDate = "05/01/2013"
 thruDate = $today
 
+'-- CBA Processing
+EnableCBA            is x
+CBA_LIB              is x
+l_care               is i
+begin_date           is d
+end_date             is d
+T                    is x
+o_cbcode             is x  'assnment ocde
+o_cbopen             is d  'open date
+b_opencba            is x  'open button
+
 getparm(parmfile)
 getoption(option)
 
@@ -164,6 +180,13 @@ endif
 if cc_staff  = "Y" then
   (void)$dbread(3, $operstaffid, s.email)
   email_cc = s.email
+endif
+
+if EnableCBA = "Y" then
+   if $loadlib(l_care,CBA_LIB) > 0 then
+      $errmsg1 = "Unable to load CBA Library :" + CBA_LIB
+      return
+   endif
 endif
 
 NewClient:
@@ -227,10 +250,10 @@ MainArea:
 
    '--- Outer border ---
    $br()
-   $ctag("<div style='position: absolute; border-style: solid; border-width: 1px; width: 825; height: 460px; z-index: 3; left: 10px; style='text-align: center'  id='OuterBorder'>")
+   $ctag("<div style='position: absolute; border-style: solid; border-width: 1px; width: 825px; height: 460px; z-index: 3; left: 10px; style='text-align: center'  id='OuterBorder'>")
 
    '--- PASRR Header ---
-   $ctag("<div style='position: absolute; border-style: solid; border-width: 0px; width: 820; height: 52px; z-index: 3; left: 1px; top: 2px; id='Header'>")
+   $ctag("<div style='position: absolute; border-style: solid; border-width: 0px; width: 820px; height: 52px; z-index: 3; left: 1px; top: 2px; id='Header'>")
    $ctag("&nbsp;")
    $text("PASRR Event Status:","sb12")
    $ctag("&nbsp;") $ctag("&nbsp;") $ctag("&nbsp;")
@@ -275,7 +298,7 @@ MainArea:
    enddo
    $brmsgclose()
 
-   $ctag("<div style='position: absolute; border-style: solid; border-width: 1px; width: 845; height: 334px; overflow:auto; z-index: 3; left: 1px; top: 50px; id='Data'>")
+   $ctag("<div style='position: absolute; border-style: solid; border-width: 1px; width: 845px; height: 334px; overflow:auto; z-index: 3; left: 1px; top: 50px; id='Data'>")
 
    ' Exclude events other than PASRR codes
    $table("Data",,"border='1' width='820'")
@@ -427,13 +450,18 @@ MainArea:
    $ctag("<div style='position: absolute; border-style: solid; border-width: 0px; width: 440; height: 50px; z-index: 3; left: 10px; top: 560px; id='Buttons'>")
    $table("AddEvent",,"border='0' width='820'")
       $row()
-         $col("right",,"45%")
-            if checkbox > 0
-               $submit(add_btn, "Roll Up Event")
-            endif
+      if EnableCBA = "Y" then
+         $col()
+         gosub frm_CBA
+      endif
+
+      if checkbox > 0
+         $col("right")
+         $submit(add_btn, "Roll Up Event")
+      endif
          $col("center",,"10%")
             $submit(exit_btn,"Exit")
-         $col(,,"45%")
+         $col(,,"10%")
             $submit(new_btn,"New Client")
    $endtable("AddEvent")
 
@@ -483,6 +511,12 @@ MainArea:
          $clear(iClientID,$regid)
          gosub GetClient
          goto NewClient
+      endif
+      if b_opencba = "Y" then
+         $clear(b_opencba)
+         '$brmsg("Not implemented",1,"CW")
+         rc = l_care:open_care(iClientID, o_cbcode, o_cbopen, $operstaffid)
+         goto Begin
       endif
    enddo
 '-----------------------------
@@ -724,6 +758,67 @@ goback
 EmailStaff:
    email_msg = "PAsRR Assessment completed for " + iClientID + " on " + $today
    (void)$email(email_billstaff[], email_sub, email_msg, email_cc)
+goback
+
+frm_CBA:
+   '--- IDD CBA section ---
+   $text("IDD - Community Based Assignments: ","error")
+   $table(1,"tight")
+   $row()
+   $col()
+   $text("Status: ","datatag")
+   if l_care:care_date(iClientID, d_PASRR_CBA_NR, $today) = "Y" then
+      l_care:get_care_assign(iClientID, d_PASRR_CBA_NR, $today, begin_date, end_date)
+      T = "Refusal / " + d_PASRR_CBA_NR + ": " + $fmt(begin_date,"MM/DD/YY")
+      if end_date dp then
+         T += $fmt(end_date," - MM/DD/YY")
+      else
+         T += " - (No Lapse Date)"
+      endif
+      $text(T)
+   elseif l_care:care_date(iClientID, d_PASRR_CBA, $today) = "Y" then
+      l_care:get_care_assign(iClientID, d_PASRR_CBA, $today, begin_date, end_date)
+      T = "Service Coordination / " + d_PASRR_CBA + ": " + $fmt(begin_date,"MM/DD/YY")
+      if end_date dp then
+         T += $fmt(end_date," - MM/DD/YY")
+      else
+         T += " - (No Lapse Date)"
+      endif
+      $text(T)
+   else
+      $text("No Assignments open","datatag")
+      $br(2)
+
+      $text("Open New Assignment?","datatag")
+      $checkbox(b_opencba,"Yes","Y",,,"CBA","Y")
+   
+      $col()
+      $block("CBA","Y")
+      $table(2,"tight")
+      $row()
+      $col()
+      $text("Open PASRR Assignment:","datatag")
+      $col()
+      $dropbox(o_cbcode,`d_PASRR_CBA + ": In NF, receiving SC"`,d_PASRR_CBA,,,,,,"Y")
+      $dropbox(o_cbcode,`d_PASRR_CBA_NR + ": In NF, refusing SC"`,d_PASRR_CBA,,,,,,"Y")
+      $dropbox(o_cbcode,"","")
+   
+      $row()
+      $col()
+      $text("Open Date: ","datatag")
+      $col()
+      $textbox(o_cbopen,"CAL",10,10,"Y")
+   
+      $row()
+      $col()
+      $col()
+      $submit(b_opencba,"Open CBA")
+      $endblock("CBA","Y")
+      $endtable(2)
+   endif
+   $endtable(1)
+   '$endfieldset()
+   '--- IDD CBA section [END] ---
 goback
 
 end PASRRFinEv
